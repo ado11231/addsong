@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#
+# addsong — download a song from a URL and have it auto-import into Apple Music.
+#
+#   addsong "https://www.youtube.com/watch?v=..."
+#
+# Pipeline:
+#   1. yt-dlp downloads the best audio stream
+#   2. ffmpeg (via yt-dlp) converts to AAC/.m4a and embeds artwork + metadata
+#   3. metadata is cleaned (strips "(Official Video)", "[4K]", etc.; splits artist/title)
+#   4. the tagged file is moved into Apple Music's "Automatically Add to Music" folder,
+#      which Apple Music imports on its own a moment later.
+#
+# See ARCHITECTURE.md / SETUP.md for the full design.
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+# Watch-folder resolution order:
+#   1. $ADDSONG_WATCH_DIR  (explicit override)
+#   2. the standard macOS Apple Music path
+WATCH_DIR_DEFAULT="$HOME/Music/Music/Media.localized/Automatically Add to Music.localized"
+WATCH_DIR="${ADDSONG_WATCH_DIR:-$WATCH_DIR_DEFAULT}"
+
+# Audio format dropped into the watch folder.
+AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
+
+PROG="$(basename "$0")"
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+err()  { printf '%s: %s\n' "$PROG" "$*" >&2; }
+die()  { err "$*"; exit 1; }
+info() { printf '%s\n' "$*"; }
+
+usage() {
+  cat <<EOF
+$PROG — download a song and auto-import it into Apple Music.
+
+USAGE:
+    $PROG <url>
+    $PROG --help
+
+ARGUMENTS:
+    <url>    A YouTube (or other yt-dlp-supported) URL for a single track.
+
+ENVIRONMENT:
+    ADDSONG_WATCH_DIR       Override the Apple Music watch folder path.
+    ADDSONG_AUDIO_FORMAT    Output audio format (default: m4a).
+
+EXAMPLES:
+    $PROG "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+NOTES:
+    - Defaults to a SINGLE track. A playlist URL will only fetch one item.
+    - No duplicate detection: re-running on the same song adds another copy.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+if [[ $# -eq 0 ]]; then
+  usage >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+URL="$1"
+
+if [[ "$URL" != http://* && "$URL" != https://* ]]; then
+  die "expected a URL (got: '$URL'). Try: $PROG \"https://www.youtube.com/watch?v=...\""
+fi
+
+# ---------------------------------------------------------------------------
+# Preflight checks
+# ---------------------------------------------------------------------------
+
+for tool in yt-dlp ffmpeg; do
+  command -v "$tool" >/dev/null 2>&1 \
+    || die "'$tool' not found on PATH. Install with: brew install yt-dlp ffmpeg"
+done
+
+if [[ ! -d "$WATCH_DIR" ]]; then
+  die "Apple Music watch folder not found:
+    $WATCH_DIR
+Open Music → Settings → Files to find your 'Music Media folder location',
+then set ADDSONG_WATCH_DIR to the 'Automatically Add to Music' folder inside it.
+See SETUP.md (Step 2)."
+fi
+
+# ---------------------------------------------------------------------------
+# Download + tag into a temp staging dir
+# ---------------------------------------------------------------------------
+# We download to a temp dir first so a failed/partial download never lands a
+# broken file in the watch folder. Only a clean result gets moved in.
+
+STAGING="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
+cleanup() { rm -rf "$STAGING"; }
+trap cleanup EXIT
+
+info "Downloading audio…"
+
+# Metadata cleanup (Phase 2):
+#   --parse-metadata splits "Artist - Title" style video titles into fields.
+#   --replace-in-metadata strips the usual junk: (Official Video), [4K],
+#     (Lyrics), (Audio), (HD), etc. — case-insensitive, repeated until gone.
+JUNK_RE='(?i)\s*[\(\[](official\s*(music\s*)?(video|audio|lyric[s]?|visualizer)|lyric[s]?|audio|video|visualizer|hd|hq|4k|8k|full\s*album|m/?v|explicit|clean|remaster(ed)?(\s*\d{4})?)[\)\]]'
+
+yt-dlp \
+  --extract-audio \
+  --audio-format "$AUDIO_FORMAT" \
+  --audio-quality 0 \
+  --embed-thumbnail \
+  --embed-metadata \
+  --no-playlist \
+  --convert-thumbnails jpg \
+  --parse-metadata '%(title)s:%(artist)s - %(title)s' \
+  --parse-metadata '%(uploader)s:%(?P<uploader>.+?)(?:\s*-\s*Topic)?$' \
+  --replace-in-metadata "title,artist,track" "$JUNK_RE" '' \
+  --replace-in-metadata "title,artist,track" '(?i)\s*[\(\[]\s*ft\.?|feat\.?.*?[\)\]]' '' \
+  --replace-in-metadata "artist" '\s*,.*$' '' \
+  -o "$STAGING/%(title)s.%(ext)s" \
+  -- "$URL" \
+  || die "download failed (see yt-dlp output above). The URL may be invalid, private, region-locked, or age-gated."
+
+# Find the produced audio file.
+shopt -s nullglob
+produced=("$STAGING"/*."$AUDIO_FORMAT")
+shopt -u nullglob
+
+if [[ ${#produced[@]} -eq 0 ]]; then
+  die "no .$AUDIO_FORMAT file was produced. Something went wrong during conversion."
+fi
+
+# ---------------------------------------------------------------------------
+# Move into the watch folder → Apple Music takes it from here
+# ---------------------------------------------------------------------------
+
+for f in "${produced[@]}"; do
+  base="$(basename "$f")"
+  dest="$WATCH_DIR/$base"
+
+  # Avoid clobbering an identically named file already mid-import.
+  if [[ -e "$dest" ]]; then
+    dest="$WATCH_DIR/${base%.*} ($(date +%s)).${base##*.}"
+  fi
+
+  mv -f "$f" "$dest"
+  info "✅ Added to Apple Music: ${base%.*}"
+done
+
+info "Done. Apple Music should import it within a second or two (make sure Music is open)."
