@@ -2,33 +2,43 @@
 #
 # addsong — download a song from a URL and have it auto-import into Apple Music.
 #
-#   addsong "https://www.youtube.com/watch?v=..."
+#   addsong "https://www.youtube.com/watch?v=..."          # single track
+#   addsong --playlist "https://www.youtube.com/playlist?list=..."
 #
-# Pipeline:
-#   1. yt-dlp downloads the best audio stream
-#   2. ffmpeg (via yt-dlp) converts to AAC/.m4a and embeds artwork + metadata
-#   3. metadata is cleaned (strips "(Official Video)", "[4K]", etc.; splits artist/title)
-#   4. the tagged file is moved into Apple Music's "Automatically Add to Music" folder,
-#      which Apple Music imports on its own a moment later.
+# Pipeline (per track):
+#   1. fetch the scraped title/uploader (no download yet)
+#   2. clean it up (strip "(Official Video)", "[4K]", split "Artist - Title")
+#   3. show it and let you accept or edit the artist/title  (interactive runs)
+#   4. skip it if we've imported this track before           (duplicate guard)
+#   5. yt-dlp downloads the audio; ffmpeg embeds artwork + your chosen tags
+#   6. move the tagged file into Apple Music's "Automatically Add to Music" folder
 #
 # See ARCHITECTURE.md / SETUP.md for the full design.
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Config
+# Config (all overridable via environment)
 # ---------------------------------------------------------------------------
 
-# Watch-folder resolution order:
-#   1. $ADDSONG_WATCH_DIR  (explicit override)
-#   2. the standard macOS Apple Music path
 WATCH_DIR_DEFAULT="$HOME/Music/Music/Media.localized/Automatically Add to Music.localized"
 WATCH_DIR="${ADDSONG_WATCH_DIR:-$WATCH_DIR_DEFAULT}"
-
-# Audio format dropped into the watch folder.
 AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
+# Ledger of already-imported tracks (for duplicate detection), keyed by video id.
+LEDGER="${ADDSONG_LEDGER:-$HOME/.local/state/addsong/imported.tsv}"
 
 PROG="$(basename "$0")"
+
+# Flags
+PLAYLIST=0      # --playlist : expand a playlist URL into individual tracks
+ASSUME_YES=0    # -y/--yes   : never prompt; accept scraped/cleaned metadata
+EDIT_FORCE=0    # --edit     : always prompt to review metadata (even in playlists)
+FORCE=0         # --force    : import even if the track is already in the ledger
+
+# Tallies (for the end-of-run summary)
+N_ADDED=0
+N_SKIPPED=0
+N_FAILED=0
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -43,49 +53,220 @@ usage() {
 $PROG — download a song and auto-import it into Apple Music.
 
 USAGE:
-    $PROG <url>
+    $PROG [options] <url>
     $PROG --help
 
+OPTIONS:
+    --playlist        Treat the URL as a playlist and import every track.
+    -y, --yes         Don't prompt; accept the scraped/cleaned metadata as-is.
+    --edit            Always prompt to review metadata (even for playlists).
+    --force           Import even if this track was imported before.
+    -h, --help        Show this help.
+
 ARGUMENTS:
-    <url>    A YouTube (or other yt-dlp-supported) URL for a single track.
+    <url>    A YouTube (or other yt-dlp-supported) URL.
+
+INTERACTIVE REVIEW:
+    For a single track in a terminal, $PROG shows the scraped artist and title
+    and lets you accept them (Enter), edit them (e), or skip (s) before import.
+    Playlists default to non-interactive; use --edit to review each track,
+    or -y to silence the prompt entirely.
 
 ENVIRONMENT:
     ADDSONG_WATCH_DIR       Override the Apple Music watch folder path.
     ADDSONG_AUDIO_FORMAT    Output audio format (default: m4a).
+    ADDSONG_LEDGER          Path to the imported-tracks ledger (dedup).
 
 EXAMPLES:
     $PROG "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-
-NOTES:
-    - Defaults to a SINGLE track. A playlist URL will only fetch one item.
-    - No duplicate detection: re-running on the same song adds another copy.
+    $PROG --playlist "https://www.youtube.com/playlist?list=PL..."
+    $PROG -y "https://youtu.be/..."     # scripted, no prompts
 EOF
+}
+
+# Clean a metadata string: strip "(Official Video)", "[4K]", "(feat. X)",
+# trailing/leading separators, "- Topic", and collapse whitespace.
+clean_meta() {
+  perl -CSD -pe '
+    BEGIN { binmode STDIN, ":utf8"; binmode STDOUT, ":utf8"; }
+    # remove bracketed junk segments, repeatedly until none remain
+    1 while s/\s*[\(\[][^\)\]]*\b(?:official(?:\s+(?:music\s+)?video|\s+audio|\s+lyrics?|\s+visualizer)?|music\s+video|lyrics?|audio|video|visualizer|hd|hq|full\s*hd|4k|8k|full\s+album|mv|m\/v|explicit|clean|remaster(?:ed)?(?:\s+\d{4})?)[^\)\]]*[\)\]]//gix;
+    s/\s*[\(\[]\s*(?:ft\.?|feat\.?)[^\)\]]*[\)\]]//gi;  # (feat. X) / [ft X]
+    s/\s*-\s*topic\s*$//i;                              # "Artist - Topic"
+    s/\s*[-–|]\s*$//;                                   # trailing separator
+    s/^\s*[-–|]\s*//;                                   # leading separator
+    s/\s{2,}/ /g; s/^\s+//; s/\s+$//;
+  '
+}
+
+# Make a string safe for a filename (no path separators / colons).
+safe_name() { printf '%s' "$1" | tr '/:\\' '___'; }
+
+ledger_has() {
+  [[ -f "$LEDGER" ]] || return 1
+  awk -F'\t' -v id="$1" '$1==id { found=1 } END { exit found?0:1 }' "$LEDGER"
+}
+
+ledger_add() {
+  mkdir -p "$(dirname "$LEDGER")"
+  printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$(date +%FT%T)" >> "$LEDGER"
+}
+
+# Interactive review. Reads/writes /dev/tty so it works mid-pipeline.
+# Sets globals REVIEW_ARTIST / REVIEW_TITLE; returns 1 if the user skips.
+review_meta() {
+  local id="$1" artist="$2" title="$3" ans x
+  REVIEW_ARTIST="$artist"
+  REVIEW_TITLE="$title"
+
+  while :; do
+    {
+      printf '\n── Review metadata (%s) ──\n' "$id"
+      printf '  Artist : %s\n' "$REVIEW_ARTIST"
+      printf '  Title  : %s\n' "$REVIEW_TITLE"
+      printf 'Accept? [Enter=yes, e=edit, s=skip]: '
+    } > /dev/tty
+    read -r ans < /dev/tty || { ans=""; }
+    case "$ans" in
+      ""|y|Y) return 0 ;;
+      s|S)    return 1 ;;
+      e|E)
+        printf '  New artist [%s]: ' "$REVIEW_ARTIST" > /dev/tty
+        read -r x < /dev/tty || x=""
+        [[ -n "$x" ]] && REVIEW_ARTIST="$x"
+        printf '  New title  [%s]: ' "$REVIEW_TITLE" > /dev/tty
+        read -r x < /dev/tty || x=""
+        [[ -n "$x" ]] && REVIEW_TITLE="$x"
+        ;;  # loop to re-show and confirm
+      *) printf '  (unrecognized — press Enter to accept, e to edit, s to skip)\n' > /dev/tty ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Process a single track URL.
+#   $1 = url, $2 = interactive (1/0)
+# Returns: 0 added, 2 skipped (dup or user skip), 1 failed.
+# ---------------------------------------------------------------------------
+process_one() {
+  local url="$1" interactive="$2"
+  local meta id raw_title raw_uploader artist title
+
+  meta="$(yt-dlp --no-playlist --print '%(id)s' --print '%(title)s' --print '%(uploader)s' -- "$url" 2>/dev/null)" \
+    || { err "could not read info for: $url (private, removed, region-locked, or age-gated?)"; return 1; }
+
+  { read -r id; read -r raw_title; read -r raw_uploader; } <<< "$meta"
+  [[ -n "$id" ]] || { err "no video id for: $url"; return 1; }
+
+  # Split "Artist - Title"; otherwise fall back to the uploader as artist.
+  if [[ "$raw_title" == *" - "* ]]; then
+    artist="${raw_title%% - *}"
+    title="${raw_title#* - }"
+  else
+    artist="$raw_uploader"
+    title="$raw_title"
+  fi
+  artist="$(printf '%s' "$artist" | clean_meta)"
+  title="$(printf '%s'  "$title"  | clean_meta)"
+  [[ -n "$title" ]] || title="$raw_title"   # never end up with an empty title
+
+  # Duplicate guard.
+  if [[ "$FORCE" -ne 1 ]] && ledger_has "$id"; then
+    info "↩︎  Skipping (already imported): $artist - $title"
+    return 2
+  fi
+
+  # Interactive review.
+  if [[ "$interactive" -eq 1 ]]; then
+    if review_meta "$id" "$artist" "$title"; then
+      artist="$REVIEW_ARTIST"; title="$REVIEW_TITLE"
+    else
+      info "↩︎  Skipped by you: $artist - $title"
+      return 2
+    fi
+  else
+    info "♪  $artist - $title"
+  fi
+
+  # Download audio + artwork into a temp staging dir.
+  local staging staged final
+  staging="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
+
+  if ! yt-dlp \
+        --no-playlist \
+        --extract-audio --audio-format "$AUDIO_FORMAT" --audio-quality 0 \
+        --embed-thumbnail --convert-thumbnails jpg \
+        -o "$staging/%(id)s.%(ext)s" \
+        -- "$url" >/dev/null 2>&1; then
+    err "download failed: $artist - $title"
+    rm -rf "$staging"
+    return 1
+  fi
+
+  staged="$staging/$id.$AUDIO_FORMAT"
+  if [[ ! -f "$staged" ]]; then
+    err "no .$AUDIO_FORMAT produced for: $artist - $title"
+    rm -rf "$staging"
+    return 1
+  fi
+
+  # Write the chosen title/artist (copies all streams, incl. embedded artwork).
+  final="$staging/out.$AUDIO_FORMAT"
+  if ! ffmpeg -y -loglevel error -i "$staged" -map 0 -c copy \
+        -metadata title="$title" \
+        -metadata artist="$artist" \
+        -metadata album_artist="$artist" \
+        "$final" >/dev/null 2>&1; then
+    err "tagging failed: $artist - $title"
+    rm -rf "$staging"
+    return 1
+  fi
+
+  # Move into the watch folder → Apple Music imports it.
+  local dest
+  dest="$WATCH_DIR/$(safe_name "$artist - $title").$AUDIO_FORMAT"
+  if [[ -e "$dest" ]]; then
+    dest="$WATCH_DIR/$(safe_name "$artist - $title") ($(date +%s)).$AUDIO_FORMAT"
+  fi
+
+  if ! mv -f "$final" "$dest"; then
+    err "could not move into watch folder (permission?): $artist - $title"
+    rm -rf "$staging"
+    return 1
+  fi
+  rm -rf "$staging"
+
+  ledger_add "$id" "$artist" "$title"
+  info "✅ Added to Apple Music: $artist - $title"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
 
-if [[ $# -eq 0 ]]; then
-  usage >&2
-  exit 1
-fi
+URL=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)   usage; exit 0 ;;
+    --playlist)  PLAYLIST=1 ;;
+    -y|--yes)    ASSUME_YES=1 ;;
+    --edit)      EDIT_FORCE=1 ;;
+    --force)     FORCE=1 ;;
+    --)          shift; URL="${1:-}"; break ;;
+    -*)          die "unknown option: $1 (try --help)" ;;
+    *)           URL="$1" ;;
+  esac
+  shift
+done
 
-case "${1:-}" in
-  -h|--help)
-    usage
-    exit 0
-    ;;
-esac
-
-URL="$1"
-
+[[ -n "$URL" ]] || { usage >&2; exit 1; }
 if [[ "$URL" != http://* && "$URL" != https://* ]]; then
   die "expected a URL (got: '$URL'). Try: $PROG \"https://www.youtube.com/watch?v=...\""
 fi
 
 # ---------------------------------------------------------------------------
-# Preflight checks
+# Preflight
 # ---------------------------------------------------------------------------
 
 for tool in yt-dlp ffmpeg; do
@@ -102,64 +283,51 @@ See SETUP.md (Step 2)."
 fi
 
 # ---------------------------------------------------------------------------
-# Download + tag into a temp staging dir
+# Decide whether to review interactively.
+#   --edit forces on; -y forces off; otherwise on for a single track at a TTY.
 # ---------------------------------------------------------------------------
-# We download to a temp dir first so a failed/partial download never lands a
-# broken file in the watch folder. Only a clean result gets moved in.
+have_tty=0
+[[ -e /dev/tty && -r /dev/tty ]] && have_tty=1
 
-STAGING="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
-cleanup() { rm -rf "$STAGING"; }
-trap cleanup EXIT
+interactive_for() {
+  # $1 = is this a playlist run? (1/0)
+  if [[ "$ASSUME_YES" -eq 1 ]]; then echo 0; return; fi
+  if [[ "$EDIT_FORCE" -eq 1 ]]; then echo "$have_tty"; return; fi
+  if [[ "$1" -eq 1 ]]; then echo 0; return; fi   # playlists default to no prompt
+  echo "$have_tty"
+}
 
-info "Downloading audio…"
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
 
-# Metadata cleanup (Phase 2):
-#   --parse-metadata splits "Artist - Title" style video titles into fields.
-#   --replace-in-metadata strips the usual junk: (Official Video), [4K],
-#     (Lyrics), (Audio), (HD), etc. — case-insensitive, repeated until gone.
-JUNK_RE='(?i)\s*[\(\[](official\s*(music\s*)?(video|audio|lyric[s]?|visualizer)|lyric[s]?|audio|video|visualizer|hd|hq|4k|8k|full\s*album|m/?v|explicit|clean|remaster(ed)?(\s*\d{4})?)[\)\]]'
+if [[ "$PLAYLIST" -eq 1 ]]; then
+  info "Expanding playlist…"
+  ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
+    || die "could not read playlist: $URL"
+  [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
 
-yt-dlp \
-  --extract-audio \
-  --audio-format "$AUDIO_FORMAT" \
-  --audio-quality 0 \
-  --embed-thumbnail \
-  --embed-metadata \
-  --no-playlist \
-  --convert-thumbnails jpg \
-  --parse-metadata '%(title)s:%(artist)s - %(title)s' \
-  --parse-metadata '%(uploader)s:%(?P<uploader>.+?)(?:\s*-\s*Topic)?$' \
-  --replace-in-metadata "title,artist,track" "$JUNK_RE" '' \
-  --replace-in-metadata "title,artist,track" '(?i)\s*[\(\[]\s*ft\.?|feat\.?.*?[\)\]]' '' \
-  --replace-in-metadata "artist" '\s*,.*$' '' \
-  -o "$STAGING/%(title)s.%(ext)s" \
-  -- "$URL" \
-  || die "download failed (see yt-dlp output above). The URL may be invalid, private, region-locked, or age-gated."
+  rev="$(interactive_for 1)"
+  while IFS= read -r vid; do
+    [[ -n "$vid" ]] || continue
+    process_one "https://www.youtube.com/watch?v=$vid" "$rev" && rc=0 || rc=$?
+    case "$rc" in
+      0) N_ADDED=$((N_ADDED+1)) ;;
+      2) N_SKIPPED=$((N_SKIPPED+1)) ;;
+      *) N_FAILED=$((N_FAILED+1)) ;;
+    esac
+  done <<< "$ids"
 
-# Find the produced audio file.
-shopt -s nullglob
-produced=("$STAGING"/*."$AUDIO_FORMAT")
-shopt -u nullglob
-
-if [[ ${#produced[@]} -eq 0 ]]; then
-  die "no .$AUDIO_FORMAT file was produced. Something went wrong during conversion."
+  info ""
+  info "Playlist done — added: $N_ADDED, skipped: $N_SKIPPED, failed: $N_FAILED"
+  [[ "$N_ADDED" -gt 0 ]] && info "Apple Music should import them shortly (make sure Music is open)."
+  [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
+else
+  rev="$(interactive_for 0)"
+  process_one "$URL" "$rev" && rc=0 || rc=$?
+  case "$rc" in
+    0) info "Done. Apple Music should import it within a second or two (make sure Music is open)."; exit 0 ;;
+    2) exit 0 ;;
+    *) exit 1 ;;
+  esac
 fi
-
-# ---------------------------------------------------------------------------
-# Move into the watch folder → Apple Music takes it from here
-# ---------------------------------------------------------------------------
-
-for f in "${produced[@]}"; do
-  base="$(basename "$f")"
-  dest="$WATCH_DIR/$base"
-
-  # Avoid clobbering an identically named file already mid-import.
-  if [[ -e "$dest" ]]; then
-    dest="$WATCH_DIR/${base%.*} ($(date +%s)).${base##*.}"
-  fi
-
-  mv -f "$f" "$dest"
-  info "✅ Added to Apple Music: ${base%.*}"
-done
-
-info "Done. Apple Music should import it within a second or two (make sure Music is open)."

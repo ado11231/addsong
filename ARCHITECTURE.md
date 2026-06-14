@@ -86,6 +86,23 @@ Two ways to get a file into Apple Music programmatically:
 We use the watch folder as the default because it's the most reliable "hands-off"
 path. AppleScript is a possible future enhancement (e.g. auto-add to a playlist).
 
+### Why an interactive review step?
+Scraped YouTube titles are messy and the artist/title split is a heuristic that
+will sometimes be wrong. Rather than silently importing bad tags, a single-track
+run shows the cleaned **artist** and **title** and lets the user accept, edit, or
+skip before anything is downloaded in full. It's the cheap insurance on the one
+thing the automation can't reliably get right. It's skippable (`-y`) for scripts,
+and playlists default to non-interactive so a long list doesn't block on prompts
+(`--edit` opts back in). The prompt reads from `/dev/tty`, so it still works when
+the run is part of a larger pipeline.
+
+### How tagging actually happens
+yt-dlp downloads the audio and embeds the thumbnail; a final `ffmpeg -c copy` pass
+writes the user's chosen `title`/`artist`/`album_artist` (copying all streams, so
+the embedded cover art is preserved without a re-encode). Metadata is fetched once
+up front with `yt-dlp --print` (no download) so the review/dedup decisions happen
+before spending bandwidth.
+
 ### Why m4a (AAC) over mp3?
 `m4a`/AAC is Apple's native format, integrates cleanly with Apple Music, and gives
 better quality per bitrate than mp3. mp3 is only preferable if you need maximum
@@ -96,9 +113,9 @@ portability to non-Apple players — not the goal here.
 | Edge case | Plan |
 |-----------|------|
 | **Ugly titles** — `Artist - Song (Official Video) [4K]` | Use yt-dlp `--parse-metadata` + a cleanup pass to strip `(Official...)`, `[4K]`, `(Lyrics)`, etc. This is the single biggest quality lever. |
-| **Artist/title split** | Prefer YouTube Music–style metadata when present; fall back to splitting on `" - "`. Imperfect; Phase 2 work. |
-| **Playlists** | A playlist URL could grab every track. Default to **single track**; add an explicit `--playlist` flag to opt in (avoids accidental 200-song dumps). |
-| **Duplicates** | Apple Music does **not** dedupe the watch folder — re-running on the same song creates a second copy. No automatic guard in v1; user beware. |
+| **Artist/title split** | Split the title on the first `" - "` (artist before, title after); otherwise fall back to the uploader as artist (stripping a trailing `- Topic`). Imperfect by nature — the **interactive review** step (below) lets the user correct it before import. |
+| **Playlists** | A playlist URL could grab every track. Default to **single track** (`--no-playlist`); the explicit `--playlist` flag opts in and processes each entry through the single-track pipeline (avoids accidental 200-song dumps). |
+| **Duplicates** | Apple Music does **not** dedupe the watch folder. We keep a small **ledger** of imported video IDs (`ADDSONG_LEDGER`, default `~/.local/state/addsong/imported.tsv`) and skip anything already in it. `--force` overrides; same-name files in the watch folder also get a timestamp suffix so nothing is clobbered mid-import. |
 | **Download failure / bad URL** | Script should exit non-zero with a readable message instead of silently dropping nothing into the watch folder. |
 | **Watch folder missing/renamed** | Path varies by macOS version and whether the library was renamed. Script should verify the folder exists and error clearly if not. See SETUP. |
 | **Region-locked / age-gated videos** | yt-dlp may need cookies; out of scope for v1, document as a known limitation. |
@@ -116,5 +133,8 @@ portability to non-Apple players — not the goal here.
 
 - AppleScript layer to add tracks to a **specific playlist** on import.
 - Optional **curl-able local server** front-end for remote/Shortcut triggering.
-- A small **config file** for output format, library path, and default playlist.
-- **Dedup check** against the library before importing.
+- A small **config file** for output format, library path, and default playlist
+  (today these are environment variables: `ADDSONG_WATCH_DIR`,
+  `ADDSONG_AUDIO_FORMAT`, `ADDSONG_LEDGER`).
+- **Library-aware dedup** — current dedup is a local ledger of imported video IDs;
+  a deeper check would query the actual Apple Music library before importing.

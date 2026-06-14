@@ -68,8 +68,7 @@ folder.
 
 ## Step 4 — Install the `addsong` command
 
-> The script itself comes in Phase 1 (see ROADMAP in the README). This is how you'll
-> install it once it exists.
+The `addsong` script lives in the repo root. Install it like this:
 
 1. Place the `addsong` script in a folder on your `PATH`:
    ```bash
@@ -107,11 +106,11 @@ Expected:
 | Symptom | Likely cause / fix |
 |--------|---------------------|
 | Song downloads but never appears in Music | Watch-folder path wrong, or Music app not open. Re-do Step 3. |
-| Appears but with junk title | Metadata cleanup not applied — Phase 2 work; see ARCHITECTURE. |
+| Appears but with junk title | Use the interactive review (press `e` to edit artist/title), or re-tag in Music. |
 | `yt-dlp: command not found` | Homebrew install didn't finish or `PATH` issue. Re-run Step 1. |
 | Missing cover art | Thumbnail embed failed; ensure `ffmpeg` is installed (yt-dlp needs it). |
 | Downloads fail on some videos | Age-gated/region-locked content may need cookies — known limitation. |
-| Duplicate copies pile up | Re-running on the same song adds a new copy; no dedup in v1. |
+| Duplicate copies pile up | Dedup tracks imported video IDs in a ledger; re-runs are skipped unless you pass `--force`. |
 
 ## Updating the tools
 

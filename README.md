@@ -32,8 +32,10 @@ well-known tools.
 
 ## Status
 
-Planning / docs phase. See [ROADMAP](#roadmap) below and
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full design.
+Working — Phases 1–3 implemented (`addsong` script). Single-track and playlist
+downloads, metadata cleanup, an interactive review step, and duplicate detection
+are all in. See [ROADMAP](#roadmap) below and [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+for the full design.
 
 ## Requirements
 
@@ -62,9 +64,37 @@ Full first-time setup (including the one-time watch-folder verification) is in
 # single track
 addsong "https://www.youtube.com/watch?v=..."
 
-# (planned) a whole playlist
+# a whole playlist
 addsong --playlist "https://www.youtube.com/playlist?list=..."
+
+# scripted: no prompts, accept scraped metadata as-is
+addsong -y "https://youtu.be/..."
 ```
+
+### Interactive review
+
+For a single track in a terminal, `addsong` shows you the scraped artist and title
+and lets you fix them before import:
+
+```
+── Review metadata (dQw4w9WgXcQ) ──
+  Artist : Rick Astley
+  Title  : Never Gonna Give You Up
+Accept? [Enter=yes, e=edit, s=skip]:
+```
+
+Press **Enter** to accept, **e** to edit the artist/title (blank keeps the current
+value), or **s** to skip the track.
+
+| Flag         | Effect                                                        |
+|--------------|--------------------------------------------------------------|
+| `--playlist` | Import every track in a playlist URL                          |
+| `-y`/`--yes` | Don't prompt; accept the scraped/cleaned metadata            |
+| `--edit`     | Always prompt to review (even for each track in a playlist)   |
+| `--force`    | Import even if the track was imported before (skips dedup)    |
+
+Playlists default to **non-interactive** (no per-track prompt) — add `--edit` to
+review each one.
 
 ## Defaults
 
@@ -90,10 +120,20 @@ Apple does the rest. (Path can vary slightly by macOS version / library name —
 
 ## Roadmap
 
-- [ ] **Phase 1 — basics:** download a single YouTube URL → m4a → watch folder → confirm auto-import
-- [ ] **Phase 2 — metadata:** clean ugly titles (`(Official Video) [4K]` etc.), reliable artist/title split
-- [ ] **Phase 3 — convenience:** playlist support, duplicate awareness, better errors
+- [x] **Phase 1 — basics:** download a single YouTube URL → m4a → watch folder → confirm auto-import
+- [x] **Phase 2 — metadata:** clean ugly titles (`(Official Video) [4K]` etc.), reliable artist/title split, interactive review/edit of artist+title
+- [x] **Phase 3 — convenience:** playlist support, duplicate detection (ledger), better errors
 - [ ] **Phase 4 — polish:** config file for output paths/format, logging
+
+### Configuration today
+
+Settings are environment variables (a config file is Phase 4):
+
+| Variable               | Purpose                                   | Default                                  |
+|------------------------|-------------------------------------------|------------------------------------------|
+| `ADDSONG_WATCH_DIR`    | Apple Music watch folder                  | standard macOS path (auto-detected)      |
+| `ADDSONG_AUDIO_FORMAT` | Output audio format                       | `m4a`                                    |
+| `ADDSONG_LEDGER`       | Imported-tracks ledger (for dedup)        | `~/.local/state/addsong/imported.tsv`    |
 
 ## Legal note
 
