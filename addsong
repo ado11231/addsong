@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# addsong — download a song from a URL and have it auto-import into Apple Music.
+# addsong: download a song from a URL and have it auto-import into Apple Music.
 #
-#   addsong "https://www.youtube.com/watch?v=..."          # single track
+#   addsong "https://www.youtube.com/watch?v=..."          single track
 #   addsong --playlist "https://www.youtube.com/playlist?list=..."
 #
 # Pipeline (per track):
-#   1. fetch the scraped title/uploader (no download yet)
-#   2. clean it up (strip "(Official Video)", "[4K]", split "Artist - Title")
-#   3. show it and let you accept or edit the artist/title  (interactive runs)
-#   4. skip it if we've imported this track before           (duplicate guard)
-#   5. yt-dlp downloads the audio; ffmpeg embeds artwork + your chosen tags
+#   1. read the scraped title/uploader (no download yet)
+#   2. clean it up (strip "(Official Video)", "[4K]"; split "Artist - Title")
+#   3. show it and let you accept or edit the artist/title (interactive runs)
+#   4. skip it if it was imported before (duplicate guard)
+#   5. yt-dlp downloads the audio; ffmpeg embeds artwork and your chosen tags
 #   6. move the tagged file into Apple Music's "Automatically Add to Music" folder
 #
 # See ARCHITECTURE.md / SETUP.md for the full design.
@@ -24,18 +24,18 @@ set -euo pipefail
 WATCH_DIR_DEFAULT="$HOME/Music/Music/Media.localized/Automatically Add to Music.localized"
 WATCH_DIR="${ADDSONG_WATCH_DIR:-$WATCH_DIR_DEFAULT}"
 AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
-# Ledger of already-imported tracks (for duplicate detection), keyed by video id.
+# Ledger of already-imported tracks, keyed by video id (duplicate detection).
 LEDGER="${ADDSONG_LEDGER:-$HOME/.local/state/addsong/imported.tsv}"
 
 PROG="$(basename "$0")"
 
 # Flags
-PLAYLIST=0      # --playlist : expand a playlist URL into individual tracks
-ASSUME_YES=0    # -y/--yes   : never prompt; accept scraped/cleaned metadata
-EDIT_FORCE=0    # --edit     : always prompt to review metadata (even in playlists)
-FORCE=0         # --force    : import even if the track is already in the ledger
+PLAYLIST=0      # --playlist: expand a playlist URL into individual tracks
+ASSUME_YES=0    # -y/--yes:   never prompt; accept scraped/cleaned metadata
+EDIT_FORCE=0    # --edit:     always prompt to review (even in playlists)
+FORCE=0         # --force:    import even if the track is already in the ledger
 
-# Tallies (for the end-of-run summary)
+# Tallies for the end-of-run summary
 N_ADDED=0
 N_SKIPPED=0
 N_FAILED=0
@@ -44,13 +44,14 @@ N_FAILED=0
 # Helpers
 # ---------------------------------------------------------------------------
 
-err()  { printf '%s: %s\n' "$PROG" "$*" >&2; }
-die()  { err "$*"; exit 1; }
-info() { printf '%s\n' "$*"; }
+err()    { printf '%s: %s\n' "$PROG" "$*" >&2; }
+die()    { err "$*"; exit 1; }
+# Aligned one-line result, e.g.  "Added    Artist - Title"
+status() { printf '  %-8s %s\n' "$1" "$2"; }
 
 usage() {
   cat <<EOF
-$PROG — download a song and auto-import it into Apple Music.
+$PROG: download a song and auto-import it into Apple Music.
 
 USAGE:
     $PROG [options] <url>
@@ -80,26 +81,26 @@ ENVIRONMENT:
 EXAMPLES:
     $PROG "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     $PROG --playlist "https://www.youtube.com/playlist?list=PL..."
-    $PROG -y "https://youtu.be/..."     # scripted, no prompts
+    $PROG -y "https://youtu.be/..."
 EOF
 }
 
-# Clean a metadata string: strip "(Official Video)", "[4K]", "(feat. X)",
-# trailing/leading separators, "- Topic", and collapse whitespace.
+# Clean a metadata string: drop "(Official Video)", "[4K]", "(feat. X)",
+# trailing/leading separators and "- Topic", then collapse whitespace.
 clean_meta() {
   perl -CSD -pe '
     BEGIN { binmode STDIN, ":utf8"; binmode STDOUT, ":utf8"; }
-    # remove bracketed junk segments, repeatedly until none remain
+    # Remove bracketed junk segments, repeating until none remain.
     1 while s/\s*[\(\[][^\)\]]*\b(?:official(?:\s+(?:music\s+)?video|\s+audio|\s+lyrics?|\s+visualizer)?|music\s+video|lyrics?|audio|video|visualizer|hd|hq|full\s*hd|4k|8k|full\s+album|mv|m\/v|explicit|clean|remaster(?:ed)?(?:\s+\d{4})?)[^\)\]]*[\)\]]//gix;
     s/\s*[\(\[]\s*(?:ft\.?|feat\.?)[^\)\]]*[\)\]]//gi;  # (feat. X) / [ft X]
     s/\s*-\s*topic\s*$//i;                              # "Artist - Topic"
-    s/\s*[-–|]\s*$//;                                   # trailing separator
-    s/^\s*[-–|]\s*//;                                   # leading separator
+    s/\s*[-\x{2013}|]\s*$//;                            # trailing separator
+    s/^\s*[-\x{2013}|]\s*//;                            # leading separator
     s/\s{2,}/ /g; s/^\s+//; s/\s+$//;
   '
 }
 
-# Make a string safe for a filename (no path separators / colons).
+# Make a string safe to use as a filename (no path separators or colons).
 safe_name() { printf '%s' "$1" | tr '/:\\' '___'; }
 
 ledger_has() {
@@ -115,30 +116,36 @@ ledger_add() {
 # Interactive review. Reads/writes /dev/tty so it works mid-pipeline.
 # Sets globals REVIEW_ARTIST / REVIEW_TITLE; returns 1 if the user skips.
 review_meta() {
-  local id="$1" artist="$2" title="$3" ans x
-  REVIEW_ARTIST="$artist"
-  REVIEW_TITLE="$title"
+  local id="$1" ans x
+  REVIEW_ARTIST="$2"
+  REVIEW_TITLE="$3"
 
   while :; do
     {
-      printf '\n── Review metadata (%s) ──\n' "$id"
-      printf '  Artist : %s\n' "$REVIEW_ARTIST"
-      printf '  Title  : %s\n' "$REVIEW_TITLE"
-      printf 'Accept? [Enter=yes, e=edit, s=skip]: '
+      printf '\n'
+      printf '  Artist   %s\n' "$REVIEW_ARTIST"
+      printf '  Title    %s\n' "$REVIEW_TITLE"
+      printf '\n'
+      printf '  [Enter] add    [e] edit    [s] skip\n'
+      printf '  > '
     } > /dev/tty
-    read -r ans < /dev/tty || { ans=""; }
+    read -r ans < /dev/tty || ans=""
+
     case "$ans" in
       ""|y|Y) return 0 ;;
       s|S)    return 1 ;;
       e|E)
-        printf '  New artist [%s]: ' "$REVIEW_ARTIST" > /dev/tty
+        printf '\n  Edit (blank keeps the current value)\n' > /dev/tty
+        printf '  Artist [%s]: ' "$REVIEW_ARTIST" > /dev/tty
         read -r x < /dev/tty || x=""
         [[ -n "$x" ]] && REVIEW_ARTIST="$x"
-        printf '  New title  [%s]: ' "$REVIEW_TITLE" > /dev/tty
+        printf '  Title  [%s]: ' "$REVIEW_TITLE" > /dev/tty
         read -r x < /dev/tty || x=""
         [[ -n "$x" ]] && REVIEW_TITLE="$x"
-        ;;  # loop to re-show and confirm
-      *) printf '  (unrecognized — press Enter to accept, e to edit, s to skip)\n' > /dev/tty ;;
+        ;;  # loop to re-show the updated values for confirmation
+      *)
+        printf '  (Enter = add, e = edit, s = skip)\n' > /dev/tty
+        ;;
     esac
   done
 }
@@ -146,7 +153,7 @@ review_meta() {
 # ---------------------------------------------------------------------------
 # Process a single track URL.
 #   $1 = url, $2 = interactive (1/0)
-# Returns: 0 added, 2 skipped (dup or user skip), 1 failed.
+# Returns: 0 added, 2 skipped (duplicate or user skip), 1 failed.
 # ---------------------------------------------------------------------------
 process_one() {
   local url="$1" interactive="$2"
@@ -172,7 +179,7 @@ process_one() {
 
   # Duplicate guard.
   if [[ "$FORCE" -ne 1 ]] && ledger_has "$id"; then
-    info "↩︎  Skipping (already imported): $artist - $title"
+    status "Skipped" "$artist - $title (already imported)"
     return 2
   fi
 
@@ -181,14 +188,12 @@ process_one() {
     if review_meta "$id" "$artist" "$title"; then
       artist="$REVIEW_ARTIST"; title="$REVIEW_TITLE"
     else
-      info "↩︎  Skipped by you: $artist - $title"
+      status "Skipped" "$artist - $title"
       return 2
     fi
-  else
-    info "♪  $artist - $title"
   fi
 
-  # Download audio + artwork into a temp staging dir.
+  # Download audio and artwork into a temp staging dir.
   local staging staged final
   staging="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
 
@@ -210,7 +215,7 @@ process_one() {
     return 1
   fi
 
-  # Write the chosen title/artist (copies all streams, incl. embedded artwork).
+  # Write the chosen tags (copies all streams, so embedded artwork is kept).
   final="$staging/out.$AUDIO_FORMAT"
   if ! ffmpeg -y -loglevel error -i "$staged" -map 0 -c copy \
         -metadata title="$title" \
@@ -222,7 +227,7 @@ process_one() {
     return 1
   fi
 
-  # Move into the watch folder → Apple Music imports it.
+  # Move into the watch folder; Apple Music imports it from there.
   local dest
   dest="$WATCH_DIR/$(safe_name "$artist - $title").$AUDIO_FORMAT"
   if [[ -e "$dest" ]]; then
@@ -237,7 +242,7 @@ process_one() {
   rm -rf "$staging"
 
   ledger_add "$id" "$artist" "$title"
-  info "✅ Added to Apple Music: $artist - $title"
+  status "Added" "$artist - $title"
   return 0
 }
 
@@ -277,7 +282,7 @@ done
 if [[ ! -d "$WATCH_DIR" ]]; then
   die "Apple Music watch folder not found:
     $WATCH_DIR
-Open Music → Settings → Files to find your 'Music Media folder location',
+Open Music > Settings > Files to find your 'Music Media folder location',
 then set ADDSONG_WATCH_DIR to the 'Automatically Add to Music' folder inside it.
 See SETUP.md (Step 2)."
 fi
@@ -297,12 +302,18 @@ interactive_for() {
   echo "$have_tty"
 }
 
+note_imported() {
+  # $1 = how many were added
+  [[ "$1" -gt 0 ]] || return 0
+  printf '\nApple Music will import shortly. Make sure the Music app is open.\n'
+}
+
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
 if [[ "$PLAYLIST" -eq 1 ]]; then
-  info "Expanding playlist…"
+  printf 'Reading playlist...\n'
   ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
     || die "could not read playlist: $URL"
   [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
@@ -318,15 +329,14 @@ if [[ "$PLAYLIST" -eq 1 ]]; then
     esac
   done <<< "$ids"
 
-  info ""
-  info "Playlist done — added: $N_ADDED, skipped: $N_SKIPPED, failed: $N_FAILED"
-  [[ "$N_ADDED" -gt 0 ]] && info "Apple Music should import them shortly (make sure Music is open)."
+  printf '\nDone. Added %d, skipped %d, failed %d.\n' "$N_ADDED" "$N_SKIPPED" "$N_FAILED"
+  note_imported "$N_ADDED"
   [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
 else
   rev="$(interactive_for 0)"
   process_one "$URL" "$rev" && rc=0 || rc=$?
   case "$rc" in
-    0) info "Done. Apple Music should import it within a second or two (make sure Music is open)."; exit 0 ;;
+    0) note_imported 1; exit 0 ;;
     2) exit 0 ;;
     *) exit 1 ;;
   esac

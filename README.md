@@ -1,62 +1,54 @@
 # apple-music-pipeline
 
-Download a song from a link and have it appear in **Apple Music** automatically —
-no drag-and-drop, no manual import.
+Download a song from a link and have it appear in **Apple Music** automatically.
 
 ```bash
 addsong "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 That one command downloads the audio, tags it (title, artist, cover art), and drops
-it into Apple Music's watch folder. Apple Music imports it on its own within a second
-or two.
+it into Apple Music's watch folder. Apple Music imports it on its own a moment later.
+No drag-and-drop, no manual import.
 
----
+> macOS only. Downloads use [`yt-dlp`](https://github.com/yt-dlp/yt-dlp);
+> conversion/tagging uses [`ffmpeg`](https://ffmpeg.org/). Only download content you
+> have the right to.
 
-## What it does
+## Setup
 
-```
-addsong <youtube-url>
-        │
-        ├─ 1. yt-dlp downloads best audio  ──► temp .m4a file
-        │
-        ├─ 2. ffmpeg converts to AAC/m4a + embeds artwork & metadata
-        │
-        └─ 3. file is moved into Apple Music's "Automatically Add to Music" folder
-                                   │
-                                   └─► Apple Music auto-imports it. Done.
-```
-
-No background server. No AppleScript. Just a small wrapper script around two
-well-known tools.
-
-## Status
-
-Working — Phases 1–3 implemented (`addsong` script). Single-track and playlist
-downloads, metadata cleanup, an interactive review step, and duplicate detection
-are all in. See [ROADMAP](#roadmap) below and [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-for the full design.
-
-## Requirements
-
-- **macOS** with the **Music** app (this is a Mac-only project by design — see
-  the Windows note in `ARCHITECTURE.md`)
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) — the downloader
-- [`ffmpeg`](https://ffmpeg.org/) — audio conversion + tagging
+**1. Install the tools** (needs [Homebrew](https://brew.sh)):
 
 ```bash
 brew install yt-dlp ffmpeg
 ```
 
-## Install
+**2. Install the command** onto your `PATH`:
 
-Full first-time setup (including the one-time watch-folder verification) is in
-[`SETUP.md`](./SETUP.md). The short version:
+```bash
+mkdir -p ~/bin
+mv addsong ~/bin/addsong
+chmod +x ~/bin/addsong
+```
 
-1. `brew install yt-dlp ffmpeg`
-2. Put the `addsong` script on your `PATH` (e.g. `~/bin` or `/usr/local/bin`)
-3. `chmod +x addsong`
-4. Confirm Apple Music's watch folder exists (see SETUP).
+If `~/bin` isn't already on your `PATH`, add it (then open a new terminal):
+
+```bash
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+```
+
+**3. Confirm the watch folder works.** Apple Music auto-imports anything dropped into:
+
+```
+~/Music/Music/Media.localized/Automatically Add to Music.localized/
+```
+
+Open the **Music** app, drop any `.m4a`/`.mp3` into that folder, and it should appear
+in your library within a couple seconds. If it does, you're ready. (If your library
+lives elsewhere, find the path in **Music > Settings > Files** and set
+`ADDSONG_WATCH_DIR` to the `Automatically Add to Music` folder inside it.)
+
+> The first time `addsong` writes there, macOS may ask your terminal for permission
+> to access the Music folder. Click **Allow**.
 
 ## Usage
 
@@ -67,77 +59,55 @@ addsong "https://www.youtube.com/watch?v=..."
 # a whole playlist
 addsong --playlist "https://www.youtube.com/playlist?list=..."
 
-# scripted: no prompts, accept scraped metadata as-is
+# no prompts, accept the scraped metadata as-is
 addsong -y "https://youtu.be/..."
 ```
 
-### Interactive review
-
-For a single track in a terminal, `addsong` shows you the scraped artist and title
-and lets you fix them before import:
+For a single track, `addsong` shows the scraped artist and title and lets you fix
+them before import:
 
 ```
-── Review metadata (dQw4w9WgXcQ) ──
-  Artist : Rick Astley
-  Title  : Never Gonna Give You Up
-Accept? [Enter=yes, e=edit, s=skip]:
+  Artist   Rick Astley
+  Title    Never Gonna Give You Up
+
+  [Enter] add    [e] edit    [s] skip
+  >
 ```
 
-Press **Enter** to accept, **e** to edit the artist/title (blank keeps the current
-value), or **s** to skip the track.
+Press **Enter** to accept, **e** to edit (blank keeps the current value), or **s**
+to skip.
 
-| Flag         | Effect                                                        |
-|--------------|--------------------------------------------------------------|
-| `--playlist` | Import every track in a playlist URL                          |
-| `-y`/`--yes` | Don't prompt; accept the scraped/cleaned metadata            |
-| `--edit`     | Always prompt to review (even for each track in a playlist)   |
-| `--force`    | Import even if the track was imported before (skips dedup)    |
+### Options
 
-Playlists default to **non-interactive** (no per-track prompt) — add `--edit` to
-review each one.
+| Flag         | Effect                                                       |
+|--------------|-------------------------------------------------------------|
+| `--playlist` | Import every track in a playlist URL                         |
+| `-y`, `--yes`| Don't prompt; accept the scraped/cleaned metadata           |
+| `--edit`     | Always prompt to review (even for each track in a playlist)  |
+| `--force`    | Import even if the track was imported before                 |
+| `-h`,`--help`| Show help                                                   |
 
-## Defaults
+Playlists are non-interactive by default; add `--edit` to review each track.
 
-| Setting        | Value                                                        |
-|----------------|-------------------------------------------------------------|
-| Audio format   | `m4a` (AAC) — Apple-native                                   |
-| Artwork        | embedded from the video thumbnail                            |
-| Metadata       | parsed from video title/uploader, cleaned up                 |
-| Source         | YouTube (other yt-dlp sites likely work but aren't a target) |
-| Import method  | Apple Music "Automatically Add to Music" watch folder        |
+### Settings
 
-## How the "instant import" works
+Configured with environment variables:
 
-Apple Music watches this folder and imports anything dropped into it:
+| Variable               | Purpose                            | Default                                |
+|------------------------|------------------------------------|----------------------------------------|
+| `ADDSONG_WATCH_DIR`    | Apple Music watch folder           | standard macOS path                    |
+| `ADDSONG_AUDIO_FORMAT` | Output audio format                | `m4a`                                  |
+| `ADDSONG_LEDGER`       | Imported-tracks list (dedup)       | `~/.local/state/addsong/imported.tsv`  |
 
-```
-~/Music/Music/Media.localized/Automatically Add to Music.localized/
-```
+## Notes
 
-The pipeline's only job for the import step is to land a properly tagged file there.
-Apple does the rest. (Path can vary slightly by macOS version / library name —
-`SETUP.md` shows how to confirm yours.)
-
-## Roadmap
-
-- [x] **Phase 1 — basics:** download a single YouTube URL → m4a → watch folder → confirm auto-import
-- [x] **Phase 2 — metadata:** clean ugly titles (`(Official Video) [4K]` etc.), reliable artist/title split, interactive review/edit of artist+title
-- [x] **Phase 3 — convenience:** playlist support, duplicate detection (ledger), better errors
-- [ ] **Phase 4 — polish:** config file for output paths/format, logging
-
-### Configuration today
-
-Settings are environment variables (a config file is Phase 4):
-
-| Variable               | Purpose                                   | Default                                  |
-|------------------------|-------------------------------------------|------------------------------------------|
-| `ADDSONG_WATCH_DIR`    | Apple Music watch folder                  | standard macOS path (auto-detected)      |
-| `ADDSONG_AUDIO_FORMAT` | Output audio format                       | `m4a`                                    |
-| `ADDSONG_LEDGER`       | Imported-tracks ledger (for dedup)        | `~/.local/state/addsong/imported.tsv`    |
-
-## Legal note
-
-This tool downloads audio from third-party sites. Downloading copyrighted material
-may violate those sites' Terms of Service and/or copyright law. Use it for content
-you own, public-domain, or Creative-Commons material — and use your own judgment
-for anything else. You are responsible for how you use it.
+- **Metadata** is cleaned automatically: junk like `(Official Video)`, `[4K]`,
+  `(Lyrics)` is stripped, and `Artist - Title` is split out (falling back to the
+  uploader as artist).
+- **Duplicates** are tracked by video ID, so re-runs skip songs already imported.
+  Use `--force` to override.
+- **Syncing to your phone** is handled by Apple, not this tool. Tracks have to upload
+  from your Mac to iCloud (they aren't in Apple's catalog), so keep the Mac open and
+  online, and make sure *Sync Library* is on for both devices.
+- Some videos (private, region-locked, age-gated) may fail to download. Keep `yt-dlp`
+  current (`brew upgrade yt-dlp`) — an outdated version is the usual cause.
