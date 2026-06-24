@@ -82,12 +82,24 @@ to skip.
 | Flag         | Effect                                                       |
 |--------------|-------------------------------------------------------------|
 | `--playlist` | Import every track in a playlist URL                         |
+| `--from FILE`| Read URLs (one per line) from `FILE`, or `-` for stdin       |
 | `-y`, `--yes`| Don't prompt; accept the scraped/cleaned metadata           |
 | `--edit`     | Always prompt to review (even for each track in a playlist)  |
 | `--force`    | Import even if the track was imported before                 |
+| `--dry-run`  | Resolve and show metadata; download/import nothing           |
 | `-h`,`--help`| Show help                                                   |
 
-Playlists are non-interactive by default; add `--edit` to review each track.
+Playlists and `--from` lists are non-interactive by default; add `--edit` to
+review each track. `--from` skips blank lines and `#` comments, so a saved list
+can be annotated:
+
+```bash
+# preview what a list would import, without downloading
+addsong --from songs.txt --dry-run
+
+# pipe in URLs from anywhere
+pbpaste | addsong --from -
+```
 
 ### Settings
 
@@ -100,6 +112,16 @@ Configured with environment variables:
 | `ADDSONG_LEDGER`       | Imported-tracks list (dedup)       | `~/.local/state/addsong/imported.tsv`  |
 | `ADDSONG_RETRIES`      | Extra attempts on transient errors | `2`                                    |
 | `ADDSONG_RETRY_DELAY`  | Base backoff seconds per attempt   | `3`                                    |
+| `ADDSONG_CONFIG`       | Config file of `KEY=VALUE` defaults| `~/.config/addsong/config`             |
+
+To set defaults once, put `KEY=VALUE` lines in `~/.config/addsong/config` (it is
+parsed, not executed, so only `ADDSONG_*` keys are read). A real environment
+variable always overrides the file:
+
+```ini
+ADDSONG_AUDIO_FORMAT=mp3
+ADDSONG_WATCH_DIR="/Volumes/Music/Automatically Add to Music.localized"
+```
 
 ## Notes
 
@@ -107,6 +129,9 @@ Configured with environment variables:
   `(Lyrics)` is stripped, and `Artist - Title` is split out (falling back to the
   uploader as artist). When a source provides structured music tags (e.g. YouTube
   Music), the real track, artist, album, year, and track number are used as-is.
+- **Sources:** any site `yt-dlp` supports works, including SoundCloud — just pass
+  the URL. (Apple Music's own catalog is not a source; this imports downloaded
+  audio into your library.)
 - **Duplicates** are tracked by video ID, so re-runs skip songs already imported.
   Use `--force` to override.
 - **Syncing to your phone** is handled by Apple, not this tool. Tracks have to upload

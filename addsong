@@ -23,6 +23,22 @@ set -euo pipefail
 
 VERSION="1.0.0"
 
+# Load defaults from a config file of KEY=VALUE lines (parsed, not sourced, so it
+# can't run arbitrary code). Only ADDSONG_* keys are honored, and a value already
+# set in the environment always wins over the file.
+CONFIG_FILE="${ADDSONG_CONFIG:-$HOME/.config/addsong/config}"
+if [[ -f "$CONFIG_FILE" ]]; then
+  while IFS='=' read -r _k _v; do
+    _k="${_k//[[:space:]]/}"
+    [[ -z "$_k" || "$_k" == \#* || "$_k" != ADDSONG_* ]] && continue
+    _v="${_v#"${_v%%[![:space:]]*}"}"   # trim leading whitespace
+    _v="${_v%\"}"; _v="${_v#\"}"        # strip surrounding double quotes
+    _v="${_v%\'}"; _v="${_v#\'}"        # strip surrounding single quotes
+    [[ -z "${!_k+set}" ]] && export "$_k=$_v"
+  done < "$CONFIG_FILE"
+  unset _k _v
+fi
+
 WATCH_DIR_DEFAULT="$HOME/Music/Music/Media.localized/Automatically Add to Music.localized"
 WATCH_DIR="${ADDSONG_WATCH_DIR:-$WATCH_DIR_DEFAULT}"
 AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
@@ -42,6 +58,8 @@ PLAYLIST=0      # --playlist: expand a playlist URL into individual tracks
 ASSUME_YES=0    # -y/--yes:   never prompt; accept scraped/cleaned metadata
 EDIT_FORCE=0    # --edit:     always prompt to review (even in playlists)
 FORCE=0         # --force:    import even if the track is already in the ledger
+DRYRUN=0        # --dry-run:  resolve and show metadata; download/import nothing
+FROM_FILE=""    # --from F:   read URLs (one per line) from a file, or - for stdin
 
 # Tallies for the end-of-run summary
 N_ADDED=0
@@ -67,9 +85,11 @@ USAGE:
 
 OPTIONS:
     --playlist        Treat the URL as a playlist and import every track.
+    --from FILE       Read URLs (one per line) from FILE, or - for stdin.
     -y, --yes         Don't prompt; accept the scraped/cleaned metadata as-is.
     --edit            Always prompt to review metadata (even for playlists).
     --force           Import even if this track was imported before.
+    --dry-run         Resolve and show metadata; download/import nothing.
     -h, --help        Show this help.
     --version         Print the version and exit.
 
@@ -88,11 +108,16 @@ ENVIRONMENT:
     ADDSONG_LEDGER          Path to the imported-tracks ledger (dedup).
     ADDSONG_RETRIES         Extra attempts on transient failures (default: 2).
     ADDSONG_RETRY_DELAY     Base backoff seconds between attempts (default: 3).
+    ADDSONG_CONFIG          Config file of KEY=VALUE defaults
+                            (default: ~/.config/addsong/config).
 
 EXAMPLES:
     $PROG "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     $PROG --playlist "https://www.youtube.com/playlist?list=PL..."
     $PROG -y "https://youtu.be/..."
+    $PROG --dry-run "https://youtu.be/..."
+    $PROG --from songs.txt
+    pbpaste | $PROG --from -
 EOF
 }
 
@@ -253,6 +278,15 @@ process_one() {
     fi
   fi
 
+  # Dry run: report what would be imported, then stop (no download, no ledger).
+  if [[ "$DRYRUN" -eq 1 ]]; then
+    status "Would add" "$artist - $title"
+    [[ -n "$album" || -n "$year" || -n "$track_no" ]] &&
+      printf '           album=%s  year=%s  track=%s\n' \
+        "${album:-—}" "${year:-—}" "${track_no:-—}"
+    return 0
+  fi
+
   # Download audio and artwork into a temp staging dir.
   local staging staged final
   staging="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
@@ -331,6 +365,8 @@ while [[ $# -gt 0 ]]; do
     -y|--yes)    ASSUME_YES=1 ;;
     --edit)      EDIT_FORCE=1 ;;
     --force)     FORCE=1 ;;
+    --dry-run)   DRYRUN=1 ;;
+    --from)      FROM_FILE="${2:-}"; [[ -n "$FROM_FILE" ]] || die "--from needs a file (or - for stdin)"; shift ;;
     --)          shift; URL="${1:-}"; break ;;
     -*)          die "unknown option: $1 (try --help)" ;;
     *)           URL="$1" ;;
@@ -338,8 +374,11 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-[[ -n "$URL" ]] || { usage >&2; exit 1; }
-if [[ "$URL" != http://* && "$URL" != https://* ]]; then
+if [[ -n "$FROM_FILE" ]]; then
+  :   # URLs come from the file; each is validated as it is processed
+elif [[ -z "$URL" ]]; then
+  usage >&2; exit 1
+elif [[ "$URL" != http://* && "$URL" != https://* ]]; then
   die "expected a URL (got: '$URL'). Try: $PROG \"https://www.youtube.com/watch?v=...\""
 fi
 
@@ -371,6 +410,7 @@ have_tty=0
 
 interactive_for() {
   # $1 = is this a playlist run? (1/0)
+  if [[ "$DRYRUN" -eq 1 ]]; then echo 0; return; fi      # nothing to confirm
   if [[ "$ASSUME_YES" -eq 1 ]]; then echo 0; return; fi
   if [[ "$EDIT_FORCE" -eq 1 ]]; then echo "$have_tty"; return; fi
   if [[ "$1" -eq 1 ]]; then echo 0; return; fi   # playlists default to no prompt
@@ -379,34 +419,62 @@ interactive_for() {
 
 note_imported() {
   # $1 = how many were added
+  [[ "$DRYRUN" -eq 1 ]] && return 0
   [[ "$1" -gt 0 ]] || return 0
   printf '\nApple Music will import shortly. Make sure the Music app is open.\n'
+}
+
+# Process a stream of URLs (one per line on stdin), updating the run tallies.
+# Must be fed via here-string / redirection (not a pipe) so the counts persist.
+#   $1 = interactive flag
+run_url_stream() {
+  local rev="$1" line rc
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"   # trim leading whitespace
+    line="${line%"${line##*[![:space:]]}"}"   # trim trailing whitespace
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    process_one "$line" "$rev" && rc=0 || rc=$?
+    case "$rc" in
+      0) N_ADDED=$((N_ADDED+1)) ;;
+      2) N_SKIPPED=$((N_SKIPPED+1)) ;;
+      *) N_FAILED=$((N_FAILED+1)) ;;
+    esac
+  done
+}
+
+# Print the end-of-run summary and exit (non-zero if anything failed).
+finish_batch() {
+  local verb="Added"
+  [[ "$DRYRUN" -eq 1 ]] && verb="Would add"
+  printf '\nDone. %s %d, skipped %d, failed %d.\n' \
+    "$verb" "$N_ADDED" "$N_SKIPPED" "$N_FAILED"
+  note_imported "$N_ADDED"
+  [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
 }
 
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
-if [[ "$PLAYLIST" -eq 1 ]]; then
+if [[ -n "$FROM_FILE" ]]; then
+  rev="$(interactive_for 1)"   # batch: non-interactive unless --edit
+  if [[ "$FROM_FILE" == "-" ]]; then
+    run_url_stream "$rev"
+  else
+    [[ -f "$FROM_FILE" ]] || die "no such file: $FROM_FILE"
+    run_url_stream "$rev" < "$FROM_FILE"
+  fi
+  finish_batch
+elif [[ "$PLAYLIST" -eq 1 ]]; then
   printf 'Reading playlist...\n'
   ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
     || die "could not read playlist: $URL"
   [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
 
   rev="$(interactive_for 1)"
-  while IFS= read -r vid; do
-    [[ -n "$vid" ]] || continue
-    process_one "https://www.youtube.com/watch?v=$vid" "$rev" && rc=0 || rc=$?
-    case "$rc" in
-      0) N_ADDED=$((N_ADDED+1)) ;;
-      2) N_SKIPPED=$((N_SKIPPED+1)) ;;
-      *) N_FAILED=$((N_FAILED+1)) ;;
-    esac
-  done <<< "$ids"
-
-  printf '\nDone. Added %d, skipped %d, failed %d.\n' "$N_ADDED" "$N_SKIPPED" "$N_FAILED"
-  note_imported "$N_ADDED"
-  [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
+  run_url_stream "$rev" \
+    <<< "$(printf '%s\n' "$ids" | sed '/^$/d; s#^#https://www.youtube.com/watch?v=#')"
+  finish_batch
 else
   rev="$(interactive_for 0)"
   process_one "$URL" "$rev" && rc=0 || rc=$?
