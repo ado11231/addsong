@@ -66,6 +66,8 @@ N_ADDED=0
 N_SKIPPED=0
 N_FAILED=0
 
+have_tty=0   # set in main(); declared here so it is defined when sourced
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -137,7 +139,13 @@ clean_meta() {
 }
 
 # Make a string safe to use as a filename (no path separators or colons).
-safe_name() { printf '%s' "$1" | tr '/:\\' '___'; }
+safe_name() {
+  local s="$1"
+  s="${s//\//_}"    # forward slash
+  s="${s//:/_}"     # colon
+  s="${s//\\/_}"    # backslash
+  printf '%s' "$s"
+}
 
 ledger_has() {
   [[ -f "$LEDGER" ]] || return 1
@@ -353,63 +361,11 @@ process_one() {
 }
 
 # ---------------------------------------------------------------------------
-# Argument parsing
-# ---------------------------------------------------------------------------
-
-URL=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -h|--help)   usage; exit 0 ;;
-    --version)   printf '%s %s\n' "$PROG" "$VERSION"; exit 0 ;;
-    --playlist)  PLAYLIST=1 ;;
-    -y|--yes)    ASSUME_YES=1 ;;
-    --edit)      EDIT_FORCE=1 ;;
-    --force)     FORCE=1 ;;
-    --dry-run)   DRYRUN=1 ;;
-    --from)      FROM_FILE="${2:-}"; [[ -n "$FROM_FILE" ]] || die "--from needs a file (or - for stdin)"; shift ;;
-    --)          shift; URL="${1:-}"; break ;;
-    -*)          die "unknown option: $1 (try --help)" ;;
-    *)           URL="$1" ;;
-  esac
-  shift
-done
-
-if [[ -n "$FROM_FILE" ]]; then
-  :   # URLs come from the file; each is validated as it is processed
-elif [[ -z "$URL" ]]; then
-  usage >&2; exit 1
-elif [[ "$URL" != http://* && "$URL" != https://* ]]; then
-  die "expected a URL (got: '$URL'). Try: $PROG \"https://www.youtube.com/watch?v=...\""
-fi
-
-# ---------------------------------------------------------------------------
-# Preflight
-# ---------------------------------------------------------------------------
-
-for tool in yt-dlp ffmpeg; do
-  command -v "$tool" >/dev/null 2>&1 \
-    || die "'$tool' not found on PATH.
-Install the dependencies with:   brew install yt-dlp ffmpeg
-(Or install $PROG via Homebrew, which pulls them in automatically -- see the README.)"
-done
-
-if [[ ! -d "$WATCH_DIR" ]]; then
-  die "Apple Music watch folder not found:
-    $WATCH_DIR
-Open Music > Settings > Files to find your 'Music Media folder location',
-then set ADDSONG_WATCH_DIR to the 'Automatically Add to Music' folder inside it.
-See SETUP.md (Step 2)."
-fi
-
-# ---------------------------------------------------------------------------
 # Decide whether to review interactively.
 #   --edit forces on; -y forces off; otherwise on for a single track at a TTY.
 # ---------------------------------------------------------------------------
-have_tty=0
-[[ -e /dev/tty && -r /dev/tty ]] && have_tty=1
-
 interactive_for() {
-  # $1 = is this a playlist run? (1/0)
+  # $1 = is this a playlist run? (1/0); reads the global have_tty.
   if [[ "$DRYRUN" -eq 1 ]]; then echo 0; return; fi      # nothing to confirm
   if [[ "$ASSUME_YES" -eq 1 ]]; then echo 0; return; fi
   if [[ "$EDIT_FORCE" -eq 1 ]]; then echo "$have_tty"; return; fi
@@ -453,34 +409,90 @@ finish_batch() {
 }
 
 # ---------------------------------------------------------------------------
-# Run
+# main: parse arguments, run preflight checks, and process the request.
+# Kept in a function (and gated by the source guard at the bottom) so the file
+# can be `source`d by tests to exercise the functions above without parsing
+# args, running preflight, or downloading anything.
 # ---------------------------------------------------------------------------
+main() {
+  local URL="" tool ids rev rc
 
-if [[ -n "$FROM_FILE" ]]; then
-  rev="$(interactive_for 1)"   # batch: non-interactive unless --edit
-  if [[ "$FROM_FILE" == "-" ]]; then
-    run_url_stream "$rev"
-  else
-    [[ -f "$FROM_FILE" ]] || die "no such file: $FROM_FILE"
-    run_url_stream "$rev" < "$FROM_FILE"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)   usage; exit 0 ;;
+      --version)   printf '%s %s\n' "$PROG" "$VERSION"; exit 0 ;;
+      --playlist)  PLAYLIST=1 ;;
+      -y|--yes)    ASSUME_YES=1 ;;
+      --edit)      EDIT_FORCE=1 ;;
+      --force)     FORCE=1 ;;
+      --dry-run)   DRYRUN=1 ;;
+      --from)      FROM_FILE="${2:-}"; [[ -n "$FROM_FILE" ]] || die "--from needs a file (or - for stdin)"; shift ;;
+      --)          shift; URL="${1:-}"; break ;;
+      -*)          die "unknown option: $1 (try --help)" ;;
+      *)           URL="$1" ;;
+    esac
+    shift
+  done
+
+  if [[ -n "$FROM_FILE" ]]; then
+    :   # URLs come from the file; each is validated as it is processed
+  elif [[ -z "$URL" ]]; then
+    usage >&2; exit 1
+  elif [[ "$URL" != http://* && "$URL" != https://* ]]; then
+    die "expected a URL (got: '$URL'). Try: $PROG \"https://www.youtube.com/watch?v=...\""
   fi
-  finish_batch
-elif [[ "$PLAYLIST" -eq 1 ]]; then
-  printf 'Reading playlist...\n'
-  ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
-    || die "could not read playlist: $URL"
-  [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
 
-  rev="$(interactive_for 1)"
-  run_url_stream "$rev" \
-    <<< "$(printf '%s\n' "$ids" | sed '/^$/d; s#^#https://www.youtube.com/watch?v=#')"
-  finish_batch
-else
-  rev="$(interactive_for 0)"
-  process_one "$URL" "$rev" && rc=0 || rc=$?
-  case "$rc" in
-    0) note_imported 1; exit 0 ;;
-    2) exit 0 ;;
-    *) exit 1 ;;
-  esac
+  # Preflight: required tools and a writable watch folder.
+  for tool in yt-dlp ffmpeg; do
+    command -v "$tool" >/dev/null 2>&1 \
+      || die "'$tool' not found on PATH.
+Install the dependencies with:   brew install yt-dlp ffmpeg
+(Or install $PROG via Homebrew, which pulls them in automatically -- see the README.)"
+  done
+
+  if [[ ! -d "$WATCH_DIR" ]]; then
+    die "Apple Music watch folder not found:
+    $WATCH_DIR
+Open Music > Settings > Files to find your 'Music Media folder location',
+then set ADDSONG_WATCH_DIR to the 'Automatically Add to Music' folder inside it.
+See SETUP.md (Step 2)."
+  fi
+
+  have_tty=0
+  [[ -e /dev/tty && -r /dev/tty ]] && have_tty=1
+
+  if [[ -n "$FROM_FILE" ]]; then
+    rev="$(interactive_for 1)"   # batch: non-interactive unless --edit
+    if [[ "$FROM_FILE" == "-" ]]; then
+      run_url_stream "$rev"
+    else
+      [[ -f "$FROM_FILE" ]] || die "no such file: $FROM_FILE"
+      run_url_stream "$rev" < "$FROM_FILE"
+    fi
+    finish_batch
+  elif [[ "$PLAYLIST" -eq 1 ]]; then
+    printf 'Reading playlist...\n'
+    ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
+      || die "could not read playlist: $URL"
+    [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
+
+    rev="$(interactive_for 1)"
+    run_url_stream "$rev" \
+      <<< "$(printf '%s\n' "$ids" | sed '/^$/d; s#^#https://www.youtube.com/watch?v=#')"
+    finish_batch
+  else
+    rev="$(interactive_for 0)"
+    process_one "$URL" "$rev" && rc=0 || rc=$?
+    case "$rc" in
+      0) note_imported 1; exit 0 ;;
+      2) exit 0 ;;
+      *) exit 1 ;;
+    esac
+  fi
+}
+
+# Run main only when executed directly. When the file is sourced (e.g. by the
+# bats tests), this is skipped so only the function definitions are loaded.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
 fi

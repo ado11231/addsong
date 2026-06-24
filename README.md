@@ -139,3 +139,15 @@ ADDSONG_WATCH_DIR="/Volumes/Music/Automatically Add to Music.localized"
   online, and make sure *Sync Library* is on for both devices.
 - Some videos (private, region-locked, age-gated) may fail to download. Keep `yt-dlp`
   current (`brew upgrade yt-dlp`) — an outdated version is the usual cause.
+
+## Development
+
+`addsong` is a single Bash script that guards `main()` behind a source check, so
+its functions can be sourced and unit-tested. Continuous integration runs the
+same two checks on every push:
+
+```bash
+brew install shellcheck bats-core   # one-time
+shellcheck addsong                  # lint
+bats test/                          # unit tests
+```
