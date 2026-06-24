@@ -185,13 +185,16 @@ review_meta() {
 # ---------------------------------------------------------------------------
 process_one() {
   local url="$1" interactive="$2"
-  local meta id raw_title raw_uploader artist title
+  local meta id raw_title raw_uploader artist title album year track_no
+  local m_track m_artist m_album m_year m_trackno
   local metaf errf reason
 
   metaf="$(mktemp "${TMPDIR:-/tmp}/addsong.meta.XXXXXX")"
   errf="$(mktemp "${TMPDIR:-/tmp}/addsong.err.XXXXXX")"
   if ! run_ytdlp "$metaf" "$errf" --no-playlist --retries 3 --socket-timeout 30 \
-        --print '%(id)s' --print '%(title)s' --print '%(uploader)s' -- "$url"; then
+        --print '%(id)s' --print '%(title)s' --print '%(uploader)s' \
+        --print '%(track)s' --print '%(artist)s' --print '%(album)s' \
+        --print '%(release_year)s' --print '%(track_number)s' -- "$url"; then
     reason="$(grep -i 'error' "$errf" | tail -n1)"
     reason="${reason:-private, removed, region-locked, or age-gated?}"
     err "could not read info for: $url ($reason)"
@@ -201,20 +204,38 @@ process_one() {
   meta="$(cat "$metaf")"
   rm -f "$metaf" "$errf"
 
-  { read -r id; read -r raw_title; read -r raw_uploader; } <<< "$meta"
+  { read -r id; read -r raw_title; read -r raw_uploader
+    read -r m_track; read -r m_artist; read -r m_album
+    read -r m_year; read -r m_trackno; } <<< "$meta"
   [[ -n "$id" ]] || { err "no video id for: $url"; return 1; }
 
-  # Split "Artist - Title"; otherwise fall back to the uploader as artist.
-  if [[ "$raw_title" == *" - "* ]]; then
-    artist="${raw_title%% - *}"
-    title="${raw_title#* - }"
+  # yt-dlp prints "NA" for missing fields; treat that as empty.
+  local v
+  for v in m_track m_artist m_album m_year m_trackno; do
+    [[ "${!v}" == "NA" ]] && printf -v "$v" '%s' ''
+  done
+
+  if [[ -n "$m_track" && -n "$m_artist" ]]; then
+    # Structured music metadata (e.g. YouTube Music) -- already clean.
+    artist="$m_artist"
+    title="$m_track"
   else
-    artist="$raw_uploader"
-    title="$raw_title"
+    # Heuristic: split "Artist - Title", else fall back to the uploader.
+    if [[ "$raw_title" == *" - "* ]]; then
+      artist="${raw_title%% - *}"
+      title="${raw_title#* - }"
+    else
+      artist="$raw_uploader"
+      title="$raw_title"
+    fi
+    artist="$(printf '%s' "$artist" | clean_meta)"
+    title="$(printf '%s'  "$title"  | clean_meta)"
   fi
-  artist="$(printf '%s' "$artist" | clean_meta)"
-  title="$(printf '%s'  "$title"  | clean_meta)"
   [[ -n "$title" ]] || title="$raw_title"   # never end up with an empty title
+
+  album="$m_album"
+  year="$m_year"
+  track_no="$m_trackno"
 
   # Duplicate guard.
   if [[ "$FORCE" -ne 1 ]] && ledger_has "$id"; then
@@ -255,11 +276,18 @@ process_one() {
   fi
 
   # Write the chosen tags (copies all streams, so embedded artwork is kept).
+  # Album / year / track number are only written when yt-dlp supplied them.
   final="$staging/out.$AUDIO_FORMAT"
+  local -a tagargs
+  tagargs=(-metadata title="$title"
+           -metadata artist="$artist"
+           -metadata album_artist="$artist")
+  [[ -n "$album" ]]    && tagargs+=(-metadata album="$album")
+  [[ -n "$year" ]]     && tagargs+=(-metadata date="$year")
+  [[ -n "$track_no" ]] && tagargs+=(-metadata track="$track_no")
+
   if ! ffmpeg -y -loglevel error -i "$staged" -map 0 -c copy \
-        -metadata title="$title" \
-        -metadata artist="$artist" \
-        -metadata album_artist="$artist" \
+        "${tagargs[@]}" \
         "$final" >/dev/null 2>&1; then
     err "tagging failed: $artist - $title"
     rm -rf "$staging"

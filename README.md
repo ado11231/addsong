@@ -105,7 +105,8 @@ Configured with environment variables:
 
 - **Metadata** is cleaned automatically: junk like `(Official Video)`, `[4K]`,
   `(Lyrics)` is stripped, and `Artist - Title` is split out (falling back to the
-  uploader as artist).
+  uploader as artist). When a source provides structured music tags (e.g. YouTube
+  Music), the real track, artist, album, year, and track number are used as-is.
 - **Duplicates** are tracked by video ID, so re-runs skip songs already imported.
   Use `--force` to override.
 - **Syncing to your phone** is handled by Apple, not this tool. Tracks have to upload
