@@ -98,6 +98,8 @@ Configured with environment variables:
 | `ADDSONG_WATCH_DIR`    | Apple Music watch folder           | standard macOS path                    |
 | `ADDSONG_AUDIO_FORMAT` | Output audio format                | `m4a`                                  |
 | `ADDSONG_LEDGER`       | Imported-tracks list (dedup)       | `~/.local/state/addsong/imported.tsv`  |
+| `ADDSONG_RETRIES`      | Extra attempts on transient errors | `2`                                    |
+| `ADDSONG_RETRY_DELAY`  | Base backoff seconds per attempt   | `3`                                    |
 
 ## Notes
 

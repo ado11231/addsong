@@ -28,6 +28,12 @@ WATCH_DIR="${ADDSONG_WATCH_DIR:-$WATCH_DIR_DEFAULT}"
 AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
 # Ledger of already-imported tracks, keyed by video id (duplicate detection).
 LEDGER="${ADDSONG_LEDGER:-$HOME/.local/state/addsong/imported.tsv}"
+# Retry behavior for transient (network) yt-dlp failures.
+RETRIES="${ADDSONG_RETRIES:-2}"          # extra attempts after the first
+RETRY_DELAY="${ADDSONG_RETRY_DELAY:-3}"  # base backoff seconds (grows per attempt)
+
+# yt-dlp errors that are permanent: never worth retrying.
+YTDLP_HARD_ERRORS='private video|members-only|members only|video unavailable|this video is unavailable|is unavailable|has been removed|removed by the user|has been terminated|account.*terminated|confirm your age|age-restricted|sign in to confirm|not available in your country|not available on this app|blocked it in your country|copyright'
 
 PROG="$(basename "$0")"
 
@@ -80,6 +86,8 @@ ENVIRONMENT:
     ADDSONG_WATCH_DIR       Override the Apple Music watch folder path.
     ADDSONG_AUDIO_FORMAT    Output audio format (default: m4a).
     ADDSONG_LEDGER          Path to the imported-tracks ledger (dedup).
+    ADDSONG_RETRIES         Extra attempts on transient failures (default: 2).
+    ADDSONG_RETRY_DELAY     Base backoff seconds between attempts (default: 3).
 
 EXAMPLES:
     $PROG "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -114,6 +122,23 @@ ledger_has() {
 ledger_add() {
   mkdir -p "$(dirname "$LEDGER")"
   printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$(date +%FT%T)" >> "$LEDGER"
+}
+
+# Run yt-dlp with bounded retry. Stdout goes to file $1, stderr to file $2,
+# remaining args are passed through. Transient (network) failures are retried
+# with linear backoff; permanent failures (see YTDLP_HARD_ERRORS) return at once.
+run_ytdlp() {
+  local out="$1" errf="$2"; shift 2
+  local attempt=0 rc
+  while :; do
+    yt-dlp "$@" >"$out" 2>"$errf" && return 0
+    rc=$?
+    if grep -qiE "$YTDLP_HARD_ERRORS" "$errf"; then return "$rc"; fi
+    attempt=$((attempt + 1))
+    [[ "$attempt" -gt "$RETRIES" ]] && return "$rc"
+    err "transient error, retrying ($attempt/$RETRIES) in $((attempt * RETRY_DELAY))s..."
+    sleep "$((attempt * RETRY_DELAY))"
+  done
 }
 
 # Interactive review. Reads/writes /dev/tty so it works mid-pipeline.
@@ -161,9 +186,20 @@ review_meta() {
 process_one() {
   local url="$1" interactive="$2"
   local meta id raw_title raw_uploader artist title
+  local metaf errf reason
 
-  meta="$(yt-dlp --no-playlist --print '%(id)s' --print '%(title)s' --print '%(uploader)s' -- "$url" 2>/dev/null)" \
-    || { err "could not read info for: $url (private, removed, region-locked, or age-gated?)"; return 1; }
+  metaf="$(mktemp "${TMPDIR:-/tmp}/addsong.meta.XXXXXX")"
+  errf="$(mktemp "${TMPDIR:-/tmp}/addsong.err.XXXXXX")"
+  if ! run_ytdlp "$metaf" "$errf" --no-playlist --retries 3 --socket-timeout 30 \
+        --print '%(id)s' --print '%(title)s' --print '%(uploader)s' -- "$url"; then
+    reason="$(grep -i 'error' "$errf" | tail -n1)"
+    reason="${reason:-private, removed, region-locked, or age-gated?}"
+    err "could not read info for: $url ($reason)"
+    rm -f "$metaf" "$errf"
+    return 1
+  fi
+  meta="$(cat "$metaf")"
+  rm -f "$metaf" "$errf"
 
   { read -r id; read -r raw_title; read -r raw_uploader; } <<< "$meta"
   [[ -n "$id" ]] || { err "no video id for: $url"; return 1; }
@@ -200,19 +236,19 @@ process_one() {
   local staging staged final
   staging="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
 
-  if ! yt-dlp \
-        --no-playlist \
+  if ! run_ytdlp /dev/null "$staging/dl.err" \
+        --no-playlist --retries 3 --fragment-retries 3 --socket-timeout 30 \
         --extract-audio --audio-format "$AUDIO_FORMAT" --audio-quality 0 \
         --embed-thumbnail --convert-thumbnails jpg \
         -o "$staging/%(id)s.%(ext)s" \
-        -- "$url" >/dev/null 2>&1; then
-    err "download failed: $artist - $title"
+        -- "$url"; then
+    err "download failed: $artist - $title ($(grep -i 'error' "$staging/dl.err" | tail -n1))"
     rm -rf "$staging"
     return 1
   fi
 
   staged="$staging/$id.$AUDIO_FORMAT"
-  if [[ ! -f "$staged" ]]; then
+  if [[ ! -s "$staged" ]]; then
     err "no .$AUDIO_FORMAT produced for: $artist - $title"
     rm -rf "$staging"
     return 1
@@ -226,6 +262,11 @@ process_one() {
         -metadata album_artist="$artist" \
         "$final" >/dev/null 2>&1; then
     err "tagging failed: $artist - $title"
+    rm -rf "$staging"
+    return 1
+  fi
+  if [[ ! -s "$final" ]]; then
+    err "tagging produced an empty file: $artist - $title"
     rm -rf "$staging"
     return 1
   fi
@@ -280,7 +321,9 @@ fi
 
 for tool in yt-dlp ffmpeg; do
   command -v "$tool" >/dev/null 2>&1 \
-    || die "'$tool' not found on PATH. Install with: brew install yt-dlp ffmpeg"
+    || die "'$tool' not found on PATH.
+Install the dependencies with:   brew install yt-dlp ffmpeg
+(Or install $PROG via Homebrew, which pulls them in automatically -- see the README.)"
 done
 
 if [[ ! -d "$WATCH_DIR" ]]; then
