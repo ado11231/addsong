@@ -12,7 +12,7 @@ Platform detection lives in `detect_os()` (`mac` / `win` / `wsl` / `linux` /
 `other`); `default_watch_dir()` returns the appropriate default per OS, and
 `ADDSONG_WATCH_DIR` always overrides it.
 
-## The pipeline (per track)
+## The Pipeline (Per Track)
 
 1. **Read metadata, no download.** `yt-dlp --print` fetches the video id, title,
    and uploader without downloading anything.
@@ -25,12 +25,13 @@ Platform detection lives in `detect_os()` (`mac` / `win` / `wsl` / `linux` /
 4. **Duplicate guard.** Each imported track's video id is recorded in a ledger
    (`ADDSONG_LEDGER`). Already-seen ids are skipped unless `--force` is given.
 5. **Download + tag.** `yt-dlp` extracts the audio and embeds the thumbnail;
-   `ffmpeg` writes the chosen title/artist tags (copying streams, so the
-   embedded artwork is preserved).
+   `ffmpeg` writes the chosen title/artist tags (copying streams, so the embedded
+   artwork is preserved). At a terminal a spinner shows progress while each step
+   runs.
 6. **Hand off to Apple Music.** The tagged file is moved into the watch folder.
    Apple Music imports it on its own a moment later.
 
-## Why the watch folder
+## Why The Watch Folder
 
 Using the watch folder instead of AppleScript or the Music API means:
 
@@ -40,34 +41,37 @@ Using the watch folder instead of AppleScript or the Music API means:
 - **Resilience.** If Music is closed when a file is written, it is imported the
   next time Music opens.
 
-## Key components in the script
+## Key Components In The Script
 
-| Function              | Responsibility                                             |
-|-----------------------|------------------------------------------------------------|
-| `detect_os()`         | Return `mac`/`win`/`wsl`/`linux`/`other` from `$OSTYPE`.   |
-| `default_watch_dir()` | Default watch/output folder per OS (probes Windows layouts). |
-| `clean_meta()`        | Normalize a metadata string (strip junk, collapse spaces). |
-| `safe_name()`         | Make a string safe to use as a filename.                   |
-| `ledger_has()` / `ledger_add()` | Duplicate detection by video id.           |
-| `subs_add()`/`subs_remove()`/`subs_list()`/`subs_sync()` | Subscribed-playlist management + sync. |
-| `review_meta()`       | Interactive accept/edit/skip prompt (reads `/dev/tty`).    |
-| `process_one()`       | Runs the full pipeline for one URL.                        |
+| Function                                                 | Responsibility                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| `detect_os()`                                            | Return `mac`/`win`/`wsl`/`linux`/`other` from `$OSTYPE`.      |
+| `default_watch_dir()`                                    | Default watch/output folder per OS (probes Windows layouts). |
+| `clean_meta()`                                           | Normalize a metadata string (strip junk, collapse spaces).   |
+| `safe_name()`                                            | Make a string safe to use as a filename.                     |
+| `ledger_has()` / `ledger_add()`                          | Duplicate detection by video id.                             |
+| `subs_add()`/`subs_remove()`/`subs_list()`/`subs_sync()` | Subscribed-playlist management and sync.                     |
+| `run_ytdlp()`                                            | Run `yt-dlp` with bounded retry on transient (network) errors. |
+| `with_spinner()`                                         | Show a progress spinner while a step runs (terminal only).   |
+| `setup_colors()`                                         | Enable colored output when writing to a terminal.            |
+| `review_meta()`                                          | Interactive accept/edit/skip prompt (reads `/dev/tty`).      |
+| `process_one()`                                          | Run the full pipeline for one URL.                           |
 
-## Exit codes (per track)
+## Exit Codes (Per Track)
 
 `process_one()` returns `0` (added), `2` (skipped — duplicate or user skip), or
 `1` (failed). The top-level run aggregates these into the end-of-run summary and
 exits non-zero if any track failed.
 
-## State and side effects
+## State And Side Effects
 
 - **Ledger:** append-only TSV at `ADDSONG_LEDGER`
-  (`~/.local/state/addsong/imported.tsv`), one row per imported track. The
-  ledger is also the source of truth for `sync`'s "only new tracks" behavior --
-  there's no per-subscription last-seen marker.
+  (`~/.local/state/addsong/imported.tsv`), one row per imported track. The ledger
+  is also the source of truth for `sync`'s "only new tracks" behavior — there's no
+  per-subscription last-seen marker.
 - **Subscriptions:** plain-text list of playlist URLs at `ADDSONG_SUBSCRIPTIONS`
   (`~/.local/state/addsong/subscribed.tsv`), one URL per line, `#` comments
   allowed. Edited only by `subscribe`/`unsubscribe`; read by `list`/`sync`.
-- **Staging:** each download uses a `mktemp -d` directory that is removed
-  whether the track succeeds or fails.
+- **Staging:** each download uses a `mktemp -d` directory that is removed whether
+  the track succeeds or fails.
 - **Output:** exactly one tagged audio file moved into `ADDSONG_WATCH_DIR`.

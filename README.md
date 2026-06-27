@@ -1,266 +1,226 @@
-# apple-music-pipeline
+<h3 align="center">addsong</h3>
 
-Download a song from a link and have it appear in **Apple Music** automatically.
+<p align="center"><b>Paste a link, and the song shows up in Apple Music automatically.</b></p>
+
+<p align="center">
+  <a href="#macos"><img src="assets/macos.svg" height="48" alt="macOS"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#windows"><img src="assets/windows.svg" height="48" alt="Windows"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#linux"><img src="assets/linux.svg" height="48" alt="Linux"></a>
+</p>
 
 ```bash
 addsong "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
-That one command downloads the audio, tags it (title, artist, cover art), and drops
-it into Apple Music's watch folder. Apple Music imports it on its own a moment later.
-No drag-and-drop, no manual import.
+That one command grabs the song, adds the **title, artist, and cover art**, and
+hands it to Apple Music. The song appears in your library a second later — no
+dragging files around.
 
-> Cross-platform: macOS, Windows, and Linux.
-> On macOS / Windows / WSL the file lands in Apple Music's (or iTunes') "Automatically
-> Add to ..." folder and the app imports it. On plain Linux there is no Apple Music
-> app, so files are written to an output folder for you to import into any player.
-> Downloads use [`yt-dlp`](https://github.com/yt-dlp/yt-dlp);
-> conversion/tagging uses [`ffmpeg`](https://ffmpeg.org/). Only download content you
-> have the right to.
+Don't have a link? Just type the song's name:
 
-## Setup
+```bash
+addsong "rick astley never gonna give you up"
+```
+
+**Note:** Songs come from YouTube (and other sites). Only download what you have
+the right to.
 
 ### Install
 
-**Homebrew (macOS)** — installs `addsong` and pulls in `yt-dlp` and `ffmpeg`:
+**On a Mac — the easy way.** One command installs `addsong` and everything it
+needs:
 
 ```bash
-brew install YOURNAME/tap/addsong
+brew install ado11231/tap/addsong
 ```
 
-<!-- Replace YOURNAME with your GitHub username once the tap is published.
-     See RELEASE.md for the publish steps. -->
+**Windows or Linux** (or a Mac without Homebrew) — three quick steps.
 
-**Manual (any platform)** — install the two dependencies yourself, then drop the
-script on your `PATH`:
+**1. Download `addsong`.** Use the green **Code** button near the top of this
+page → **Download ZIP**, then unzip it.
+
+**2. Get the two free tools it uses** — `yt-dlp` (downloads songs) and `ffmpeg`
+(converts them):
 
 ```bash
-# dependencies (pick one per platform):
-#   macOS:  brew install yt-dlp ffmpeg
-#   Win*:   choco install yt-dlp ffmpeg   (in Git Bash / WSL)
-#   Debian: sudo apt install yt-dlp ffmpeg
-#   Arch:   sudo pacman -S yt-dlp ffmpeg
-mkdir -p ~/bin
-mv addsong ~/bin/addsong
-chmod +x ~/bin/addsong
+choco install yt-dlp ffmpeg         # Windows (run inside Git Bash or WSL)
+sudo apt install yt-dlp ffmpeg      # Debian / Ubuntu
+sudo pacman -S yt-dlp ffmpeg        # Arch
 ```
 
-If `~/bin` isn't already on your `PATH`, add it (then open a new terminal):
+**3. Put `addsong` where your terminal can find it:**
 
 ```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc        # macOS (zsh)
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc       # Linux / Git Bash
+mkdir -p ~/bin && mv addsong ~/bin/ && chmod +x ~/bin/addsong
 ```
 
-### Confirm the watch folder
-
-`addsong` drops tagged files into a watch folder that your music app scans.
-The default is detected per platform — override with `ADDSONG_WATCH_DIR` only
-if your library lives elsewhere.
-
-**macOS** — Apple Music auto-imports from:
-
-```
-~/Music/Music/Media.localized/Automatically Add to Music.localized/
-```
-
-Open the **Music** app, drop any `.m4a`/`.mp3` into that folder, and it should
-appear in your library within a couple of seconds. (Find the path under
-**Music > Settings > Files** if your library isn't in the default location.)
-
-> The first time `addsong` writes there, macOS may prompt your terminal for
-> permission to access the Music folder. Click **Allow**.
-
-**Windows** — needs [Git Bash](https://git-scm.com/downloads) (or WSL). The watch
-folder is one of (the script probes both):
-
-```
-%USERPROFILE%\Music\Apple Music\Media\Automatically Add to Apple Music    (new Apple Music preview app)
-%USERPROFILE%\Music\iTunes\iTunes Media\Automatically Add to iTunes       (legacy iTunes)
-```
-
-Open the Apple Music preview app (or iTunes) **at least once** so it creates its
-library and watch folder, then re-run `addsong`. With the app running, files
-import on the spot; with it closed, the next launch imports them.
-
-> Use `.m4a` (the default). Legacy iTunes can't decode `.flac` and quietly
-> moves such files to a `Not Added` subfolder instead of importing them.
-
-**Linux / WSL without a Windows library** — there's no Apple Music app, so
-`addsong` writes to an output folder you can import into any player:
-
-```
-~/Music/addsong/
-```
-
-The script creates this folder on first run and prints where it is. To use the
-Apple Music watch folder from WSL instead, point at the Windows path:
+Open a new terminal and check it works:
 
 ```bash
-export ADDSONG_WATCH_DIR="/mnt/c/Users/you/Music/Apple Music/Media/Automatically Add to Apple Music"
+addsong --version
 ```
 
-## Usage
+**Got `command not found`?** Run this once, reopen your terminal, and try again:
 
 ```bash
-# single track
-addsong "https://www.youtube.com/watch?v=..."
-
-# by name — no URL needed (top YouTube result)
-addsong "rick astley never gonna give you up"
-
-# top 3 search results
-addsong --search 3 "80s disco mix"
-
-# a whole playlist
-addsong --playlist "https://www.youtube.com/playlist?list=..."
-
-# no prompts, accept the scraped metadata as-is
-addsong -y "https://youtu.be/..."
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc   # use ~/.zshrc on a Mac
 ```
 
-For a single track, `addsong` shows the scraped artist and title and lets you fix
-them before import:
+### Add Your First Song
+
+Type any song's name — no link needed:
+
+```bash
+addsong "your favourite song"
+```
+
+`addsong` finds it and shows what it got, so you can catch any mistakes:
 
 ```
   Artist   Rick Astley
   Title    Never Gonna Give You Up
 
   [Enter] add    [e] edit    [s] skip
-  >
 ```
 
-Press **Enter** to accept, **e** to edit (blank keeps the current value), or **s**
-to skip.
+Press **Enter** and it lands in Apple Music. That's the whole thing.
 
-### Subscriptions
+### Where Your Songs Go
 
-Pick a YouTube playlist once, then keep your library in sync as new tracks land:
+`addsong` saves songs where your music app imports them, and finds that spot on
+its own. **You only need this section if a song doesn't show up** — plus the
+one-time notes for Windows and Linux.
+
+#### <img src="assets/macos.svg" height="18" align="absmiddle">&nbsp;macOS
+
+Songs go here, and Apple Music imports them on its own:
+
+```
+~/Music/Music/Media.localized/Automatically Add to Music.localized/
+```
+
+If nothing shows up, your library may live elsewhere. Find it under
+**Music → Settings → Files**, then tell `addsong` where it is:
 
 ```bash
-# remember a playlist once
-addsong subscribe "https://www.youtube.com/playlist?list=PL..."
-
-# show what you're subscribed to
-addsong list
-
-# import any new tracks from every subscribed playlist
-addsong sync
+export ADDSONG_WATCH_DIR="/path/to/Automatically Add to Music.localized"
 ```
 
-`sync` expands each subscribed playlist and imports only the tracks you haven't
-imported before (re-using the same dedup ledger, so it's safe to re-run daily).
-Flags compose with it just like a manual playlist run:
+**Note:** The first time it saves a song, macOS may ask for permission to use
+the Music folder. Click **Allow**.
+
+#### <img src="assets/windows.svg" height="18" align="absmiddle">&nbsp;Windows
+
+You'll run `addsong` inside **Git Bash** or **WSL**. **Open the Apple Music app
+(or iTunes) once** so it creates your library — then `addsong` can find it.
+
+**Tip:** Keep the default `.m4a` format. Older iTunes can't play `.flac` and
+quietly skips those files.
+
+If your library is on another drive, point at it directly:
 
 ```bash
-addsong sync --dry-run        # preview what sync would import
-addsong sync -y               # no prompts
-addsong sync --force          # re-import tracks even if already in the ledger
-addsong sync --edit           # review each new track
+export ADDSONG_WATCH_DIR="D:/iTunes/iTunes Media/Automatically Add to iTunes"
 ```
 
-Forget a playlist:
+#### <img src="assets/linux.svg" height="18" align="absmiddle">&nbsp;Linux
+
+There's no Apple Music on Linux, so songs are saved to a folder instead:
+
+```
+~/Music/addsong/
+```
+
+`addsong` makes this folder and prints where it is. Add the files to any music
+player you like. To use a different folder:
 
 ```bash
-addsong unsubscribe "https://www.youtube.com/playlist?list=PL..."
+export ADDSONG_WATCH_DIR="/srv/music/inbox"
 ```
 
-The subscription file is plain text (one URL per line, `#` comments allowed) so
-you can edit it by hand if you like:
-
-```
-~/.local/state/addsong/subscribed.tsv
-```
-
-### Options
-
-| Flag           | Effect                                                       |
-|----------------|-------------------------------------------------------------|
-| `--search N`   | Treat the argument as a free-text YouTube search; import the top N (1-50) results. Default `1` when the argument is not a URL. No new dependencies. |
-| `--playlist`   | Import every track in a playlist URL                         |
-| `--from FILE`  | Read URLs (one per line) from `FILE`, or `-` for stdin       |
-| `-y`, `--yes`  | Don't prompt; accept the scraped/cleaned metadata           |
-| `--edit`       | Always prompt to review (even for each track in a playlist)  |
-| `--force`      | Import even if the track was imported before                 |
-| `--dry-run`    | Resolve and show metadata; download/import nothing           |
-| `--quiet`      | Suppress info banners and per-track status lines (errors still print) |
-| `--verbose`    | Surface `yt-dlp` / `ffmpeg` stderr for troubleshooting       |
-| `--no-color`   | Disable colored output (also honors the `NO_COLOR` env var)  |
-| `-h`,`--help`  | Show help                                                   |
-
-Playlists and `--from` lists are non-interactive by default; add `--edit` to
-review each track. `--from` skips blank lines and `#` comments, so a saved list
-can be annotated:
+### More Ways To Add Songs
 
 ```bash
-# preview what a list would import, without downloading
-addsong --from songs.txt --dry-run
+# paste a link instead of a name
+addsong "https://www.youtube.com/watch?v=..."
 
-# pipe in URLs from anywhere (pbpaste on macOS; xclip -o / powershell gcb on Linux/Win)
-pbpaste | addsong --from -
+# see the top 3 matches and choose
+addsong --search 3 "80s disco mix"
+
+# add a whole playlist at once
+addsong --playlist "https://www.youtube.com/playlist?list=..."
 ```
 
-### Settings
+#### Follow A Playlist
 
-Configured with environment variables:
+Subscribe once, then grab new songs whenever you want — it skips anything you
+already have:
 
-| Variable               | Purpose                            | Default                                |
-|------------------------|------------------------------------|----------------------------------------|
-| `ADDSONG_WATCH_DIR`    | Watch / output folder              | auto-detected per OS (see Setup)       |
-| `ADDSONG_AUDIO_FORMAT` | Output audio format                | `m4a`                                  |
-| `ADDSONG_LEDGER`       | Imported-tracks list (dedup)       | `~/.local/state/addsong/imported.tsv`  |
-| `ADDSONG_SUBSCRIPTIONS`| Subscribed-playlists file          | `~/.local/state/addsong/subscribed.tsv`|
-| `ADDSONG_RETRIES`      | Extra attempts on transient errors | `2`                                    |
-| `ADDSONG_RETRY_DELAY`  | Base backoff seconds per attempt   | `3`                                    |
-| `ADDSONG_CONFIG`       | Config file of `KEY=VALUE` defaults| `~/.config/addsong/config`             |
-
-To set defaults once, put `KEY=VALUE` lines in `~/.config/addsong/config` (it is
-parsed, not executed, so only `ADDSONG_*` keys are read). A real environment
-variable always overrides the file:
-
-```ini
-ADDSONG_AUDIO_FORMAT=mp3
-ADDSONG_WATCH_DIR="/Volumes/Music/Automatically Add to Music.localized"
+```bash
+addsong subscribe "https://www.youtube.com/playlist?list=PL..."   # follow it
+addsong list                                                      # see your list
+addsong sync                                                      # grab new songs
 ```
 
-## Notes
+Stop following with `addsong unsubscribe "<link>"`.
 
-- **Progress feedback:** at a terminal, each track shows a spinner while it
-  fetches info and downloads, then collapses to a single colored `Added` /
-  `Skipped` / `Failed` line. The spinner is automatically suppressed when output
-  isn't a terminal (pipes, CI) and under `--quiet` / `--verbose`.
-- **Metadata** is cleaned automatically: junk like `(Official Video)`, `[4K]`,
-  `(Lyrics)` is stripped, and `Artist - Title` is split out (falling back to the
-  uploader as artist). When a source provides structured music tags (e.g. YouTube
-  Music), the real track, artist, album, year, and track number are used as-is.
-- **Sources:** any site `yt-dlp` supports works, including SoundCloud — just pass
-  the URL. (Apple Music's own catalog is not a source; this imports downloaded
-  audio into your library.)
-- **Search-by-name** (no URL): pass a free-text query and `addsong` imports the
-  top YouTube result (or top `N` with `--search N`). YouTube's top result isn't
-  always the studio original — use `--edit` to review each hit, or `--dry-run`
-  to preview what would import before committing.
-- **Duplicates** are tracked by video ID, so re-runs skip songs already imported.
-  Use `--force` to override.
-- **Syncing to your phone** is handled by Apple, not this tool. Tracks have to
-  upload from your computer to iCloud (they aren't in Apple's catalog), so keep
-  the Mac/PC open and online, and make sure *Sync Library* is on for both
-  devices. On Linux / WSL output-only mode there's no sync — move the file into
-  your library of choice yourself.
-- Some videos (private, region-locked, age-gated) may fail to download. Keep
-  `yt-dlp` current (`brew upgrade yt-dlp` / `choco upgrade yt-dlp` /
-  `sudo pacman -Syu yt-dlp` / distro upgrade) — an outdated version is the
-  usual cause. Re-run with `--verbose` to see the underlying `yt-dlp` / `ffmpeg`
-  error.
+### All The Options
 
-## Development
+The ones you'll reach for most:
 
-`addsong` is a single Bash script that guards `main()` behind a source check, so
-its functions can be sourced and unit-tested. Continuous integration runs the
-same two checks on every push:
+| Flag          | What it does                                    |
+| ------------- | ----------------------------------------------- |
+| `--search N`  | Show the top N matches and let you pick (1–50). |
+| `--playlist`  | Add every song in a playlist.                   |
+| `--from FILE` | Add every link in a file, one per line.         |
+| `-y`          | Skip the confirm prompt and just add it.        |
+| `--edit`      | Always let you fix the title first.             |
+
+And a few for when you need them:
+
+| Flag         | What it does                                   |
+| ------------ | ---------------------------------------------- |
+| `--force`    | Add a song again even if you already have it.  |
+| `--dry-run`  | Preview what would happen — downloads nothing. |
+| `--verbose`  | Show the full error when something breaks.     |
+| `--quiet`    | Show only errors, nothing else.                |
+| `--no-color` | Turn off colored text.                         |
+| `--help`     | List every command and option.                 |
+
+Want to set something permanently? A few defaults live in environment variables —
+the main one is `ADDSONG_WATCH_DIR` (where songs are saved). Run `addsong --help`
+for the full list.
+
+### When Something Goes Wrong
+
+- **`command not found: yt-dlp` (or `ffmpeg`).** You're missing the two tools —
+  install them (step 2 of [Install](#install)).
+- **A song wouldn't download.** It may be private or blocked in your country.
+  More often `yt-dlp` is just out of date — update it
+  (`brew upgrade yt-dlp` / `choco upgrade yt-dlp` / `sudo pacman -Syu yt-dlp`),
+  then add `--verbose` to see the real error.
+- **The song never appears (Mac/Windows).** Open the Apple Music app at least
+  once so it exists, and keep it open while you add songs.
+- **It downloaded but isn't on my phone.** That part is Apple's job — turn on
+  **Sync Library** on every device and keep your computer on and online.
+- **It grabbed the wrong version.** A name search takes YouTube's top hit, which
+  isn't always the real one — use `--edit` to fix it, or `--dry-run` to preview
+  before adding.
+
+### For Developers
+
+`addsong` is one self-contained Bash script — its functions can be sourced and
+tested without touching the network. Before opening a pull request, run the same
+two checks that CI does:
 
 ```bash
 brew install shellcheck bats-core   # one-time
-shellcheck addsong                  # lint
-bats test/                          # unit tests
+shellcheck addsong                  # lint the script
+bats test/                          # run the tests
 ```
+
+**Learn more:** [how it works](ARCHITECTURE.md) ·
+[making a release](RELEASE.md) ·
+[license](LICENSE)

@@ -1,33 +1,33 @@
-# Releasing addsong + publishing the Homebrew tap
+# Releasing addsong + Publishing The Homebrew Tap
 
 The main repo is already pushed to https://github.com/ado11231/apple-music-pipeline.
 
-## 1. Tag and push the release
+## 1. Tag And Push The Release
 
 The version in the script (`VERSION` in `addsong`) and the tag must match.
-It is currently `1.0.0`.
+It is currently `1.3.0`.
 
 ```bash
-git tag -a v1.0.0 -m "addsong 1.0.0"
-git push origin v1.0.0
+git tag -a v1.3.0 -m "addsong 1.3.0"
+git push origin v1.3.0
 ```
 
 GitHub now serves a source tarball at:
 
 ```
-https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.0.0.tar.gz
+https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.3.0.tar.gz
 ```
 
-## 2. Compute the tarball checksum
+## 2. Compute The Tarball Checksum
 
 ```bash
-curl -sL https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.0.0.tar.gz \
+curl -sL https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.3.0.tar.gz \
   | shasum -a 256
 ```
 
 Copy the 64-character hash.
 
-## 3. Create your tap repo (one time, reusable for every future tool)
+## 3. Create Your Tap Repo (One Time, Reusable For Every Future Tool)
 
 Create an empty repo named exactly **`homebrew-tap`** on GitHub (no README, no
 .gitignore), then clone it and add the formula:
@@ -38,7 +38,7 @@ mkdir -p ~/homebrew-tap/Formula
 cp Formula/addsong.rb ~/homebrew-tap/Formula/addsong.rb
 ```
 
-## 4. Fill in the sha256
+## 4. Fill In The sha256
 
 In `~/homebrew-tap/Formula/addsong.rb`, replace the placeholder sha256 with the
 hash from step 2:
@@ -52,15 +52,15 @@ Commit and push:
 ```bash
 cd ~/homebrew-tap
 git add Formula/addsong.rb
-git commit -m "addsong 1.0.0"
+git commit -m "addsong 1.3.0"
 git push
 ```
 
-## 5. Test the install
+## 5. Test The Install
 
 ```bash
 brew install ado11231/tap/addsong
-addsong --version            # => addsong 1.0.0
+addsong --version            # => addsong 1.3.0
 ```
 
 Optionally audit the formula before publishing:
@@ -70,14 +70,14 @@ brew audit --new --formula ado11231/tap/addsong
 brew test addsong
 ```
 
-## Future releases
+## Future Releases
 
 1. Bump `VERSION` in `addsong`, commit and push.
 2. Tag `vX.Y.Z`, push the tag.
 3. Recompute the sha256 (step 2) and update `url` + `sha256` in the tap's
    `Formula/addsong.rb`, then push the tap.
 
-## Adding more tools to the same tap
+## Adding More Tools To The Same Tap
 
 Drop another `Formula/<tool>.rb` into the same `homebrew-tap` repo. Users get it
 with `brew install ado11231/tap/<tool>` — no new tap needed.

@@ -1,0 +1,8 @@
+{
+  // The README uses raw HTML (the centered, clickable logo banner) that some
+  // Markdown formatters strip on save. Disable format-on-save for Markdown so
+  // that HTML survives. Remove this if you switch to an HTML-safe formatter.
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
+}

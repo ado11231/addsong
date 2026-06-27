@@ -19,7 +19,7 @@
 #   5. yt-dlp downloads the audio; ffmpeg embeds artwork and your chosen tags
 #   6. move the tagged file into the watch folder (Apple Music / iTunes / output)
 #
-# See ARCHITECTURE.md / SETUP.md for the full design.
+# See the README (Setup) and ARCHITECTURE.md for the full design.
 
 set -euo pipefail
 
@@ -756,7 +756,7 @@ main() {
       || die "'$tool' not found on PATH.
 Install yt-dlp and ffmpeg (e.g. brew install yt-dlp ffmpeg on macOS,
 choco install yt-dlp ffmpeg on Windows, or use your distro's package manager).
-See SETUP.md."
+See the Setup section in the README."
   done
 
   # Preflight: watch folder. mac/win/wsl expect an Apple Music app folder to
@@ -768,20 +768,20 @@ See SETUP.md."
     $WATCH_DIR
 Open Music > Settings > Files to find your 'Music Media folder location',
 then set ADDSONG_WATCH_DIR to the 'Automatically Add to Music' folder inside it.
-See SETUP.md." ;;
+See the Setup section in the README." ;;
       win)
         die "Apple Music watch folder not found:
     $WATCH_DIR
 Open the Apple Music preview app (or iTunes) at least once so it creates the
 folder, then re-run. Or set ADDSONG_WATCH_DIR to your library's
-'Automatically Add to ...' folder. See SETUP.md." ;;
+'Automatically Add to ...' folder. See the Setup section in the README." ;;
       wsl)
         die "Apple Music watch folder not found:
     $WATCH_DIR
 Open the Apple Music preview app (or iTunes) in Windows at least once so it
 creates the folder. From WSL, point ADDSONG_WATCH_DIR at the Windows path,
 e.g. /mnt/c/Users/you/Music/Apple Music/Media/Automatically Add to Apple Music.
-See SETUP.md." ;;
+See the Setup section in the README." ;;
       *)
         # Output-only: macOS Apple Music app doesn't exist here. Ensure the
         # fallback folder exists and continue; import is the user's job.
