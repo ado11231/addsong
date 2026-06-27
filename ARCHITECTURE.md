@@ -2,8 +2,15 @@
 
 `addsong` is a single Bash script. It has no daemon, no API access, and no
 dependency on AppleScript or the Music app's scripting interface. It relies on
-one macOS behavior: Apple Music automatically imports any audio file dropped
-into its "Automatically Add to Music" folder.
+one behavior that Apple Music (macOS), the Apple Music preview app (Windows 11),
+and legacy iTunes (Windows) all share: each scans a per-library "Automatically
+Add to ..." watch folder and imports anything dropped there. On Linux / WSL
+without a Windows library, `addsong` falls back to writing tagged files into an
+output folder for manual import into any player.
+
+Platform detection lives in `detect_os()` (`mac` / `win` / `wsl` / `linux` /
+`other`); `default_watch_dir()` returns the appropriate default per OS, and
+`ADDSONG_WATCH_DIR` always overrides it.
 
 ## The pipeline (per track)
 
@@ -35,13 +42,15 @@ Using the watch folder instead of AppleScript or the Music API means:
 
 ## Key components in the script
 
-| Function        | Responsibility                                             |
-|-----------------|------------------------------------------------------------|
-| `clean_meta()`  | Normalize a metadata string (strip junk, collapse spaces). |
-| `safe_name()`   | Make a string safe to use as a filename.                   |
+| Function              | Responsibility                                             |
+|-----------------------|------------------------------------------------------------|
+| `detect_os()`         | Return `mac`/`win`/`wsl`/`linux`/`other` from `$OSTYPE`.   |
+| `default_watch_dir()` | Default watch/output folder per OS (probes Windows layouts). |
+| `clean_meta()`        | Normalize a metadata string (strip junk, collapse spaces). |
+| `safe_name()`         | Make a string safe to use as a filename.                   |
 | `ledger_has()` / `ledger_add()` | Duplicate detection by video id.           |
-| `review_meta()` | Interactive accept/edit/skip prompt (reads `/dev/tty`).    |
-| `process_one()` | Runs the full pipeline for one URL.                        |
+| `review_meta()`       | Interactive accept/edit/skip prompt (reads `/dev/tty`).    |
+| `process_one()`       | Runs the full pipeline for one URL.                        |
 
 ## Exit codes (per track)
 

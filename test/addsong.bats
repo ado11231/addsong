@@ -130,7 +130,9 @@ STUB
   chmod +x "$STUBBIN/yt-dlp" "$STUBBIN/ffmpeg"
   export PATH="$STUBBIN:$PATH"
   export ADDSONG_WATCH_DIR="$WATCH"
-  export ADDSONG_LEDGER="$(mktemp)"
+  local ledger
+  ledger="$(mktemp)"
+  export ADDSONG_LEDGER="$ledger"
 }
 
 teardown_stubs() {
@@ -192,4 +194,75 @@ teardown_stubs() {
   run "$ADDSONG" --playlist --search 2 "https://youtube.com/playlist?list=x"
   [ "$status" -ne 0 ]
   grep -q 'exclusive' <<<"$output"
+}
+
+# --- detect_os -----------------------------------------------------------
+#
+# detect_os() reads $OSTYPE (and, on Linux, the kernel release for the WSL
+# signature). We override OSTYPE in the sourced subprocess. The WSL branch
+# can't be unit-tested (we can't fake /proc/sys/kernel/osrelease), so it is
+# exercised only manually / documented.
+
+@test "detect_os: darwin* -> mac" {
+  run bash -c "OSTYPE=darwin23; source '$ADDSONG' 2>/dev/null; detect_os"
+  [ "$status" -eq 0 ]
+  [ "$output" = "mac" ]
+}
+
+@test "detect_os: msys -> win" {
+  run bash -c "OSTYPE=msys; source '$ADDSONG' 2>/dev/null; detect_os"
+  [ "$status" -eq 0 ]
+  [ "$output" = "win" ]
+}
+
+@test "detect_os: cygwin -> win" {
+  run bash -c "OSTYPE=cygwin1.7; source '$ADDSONG' 2>/dev/null; detect_os"
+  [ "$status" -eq 0 ]
+  [ "$output" = "win" ]
+}
+
+@test "detect_os: unknown OSTYPE -> other" {
+  run bash -c "OSTYPE=hpux; source '$ADDSONG' 2>/dev/null; detect_os"
+  [ "$status" -eq 0 ]
+  [ "$output" = "other" ]
+}
+
+# --- default_watch_dir ---------------------------------------------------
+
+@test "default_watch_dir: mac uses the standard Apple Music path" {
+  run bash -c "OSTYPE=darwin23; HOME=/tmp/fakehome; source '$ADDSONG' 2>/dev/null; default_watch_dir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "/tmp/fakehome/Music/Music/Media.localized/Automatically Add to Music.localized" ]
+}
+
+@test "default_watch_dir: win prefers Apple Music preview folder if present" {
+  base="$(mktemp -d)"
+  mkdir -p "$base/Music/Apple Music/Media/Automatically Add to Apple Music"
+  run bash -c "OSTYPE=msys; USERPROFILE='$base'; source '$ADDSONG' 2>/dev/null; default_watch_dir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$base/Music/Apple Music/Media/Automatically Add to Apple Music" ]
+  rm -rf "$base"
+}
+
+@test "default_watch_dir: win falls back to legacy iTunes folder" {
+  base="$(mktemp -d)"
+  mkdir -p "$base/Music/iTunes/iTunes Media/Automatically Add to iTunes"
+  run bash -c "OSTYPE=msys; USERPROFILE='$base'; source '$ADDSONG' 2>/dev/null; default_watch_dir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$base/Music/iTunes/iTunes Media/Automatically Add to iTunes" ]
+  rm -rf "$base"
+}
+
+@test "default_watch_dir: win returns preview path when nothing exists yet" {
+  base="$(mktemp -d)"
+  run bash -c "OSTYPE=msys; USERPROFILE='$base'; source '$ADDSONG' 2>/dev/null; default_watch_dir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$base/Music/Apple Music/Media/Automatically Add to Apple Music" ]
+  rm -rf "$base"
+}
+
+@test "default_watch_dir: linux returns an output-only fallback folder" {
+  run bash -c "OSTYPE=linux-gnu; HOME=/tmp/fakehome; source '$ADDSONG' 2>/dev/null; default_watch_dir"
+  [ "$status" -eq 0 ]
+  [ "$output" = "/tmp/fakehome/Music/addsong" ]
 }

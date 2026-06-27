@@ -10,7 +10,11 @@ That one command downloads the audio, tags it (title, artist, cover art), and dr
 it into Apple Music's watch folder. Apple Music imports it on its own a moment later.
 No drag-and-drop, no manual import.
 
-> macOS only. Downloads use [`yt-dlp`](https://github.com/yt-dlp/yt-dlp);
+> Cross-platform: macOS, Windows, and Linux.
+> On macOS / Windows / WSL the file lands in Apple Music's (or iTunes') "Automatically
+> Add to ..." folder and the app imports it. On plain Linux there is no Apple Music
+> app, so files are written to an output folder for you to import into any player.
+> Downloads use [`yt-dlp`](https://github.com/yt-dlp/yt-dlp);
 > conversion/tagging uses [`ffmpeg`](https://ffmpeg.org/). Only download content you
 > have the right to.
 
@@ -18,8 +22,7 @@ No drag-and-drop, no manual import.
 
 ### Install
 
-**Homebrew** (recommended) — installs `addsong` and pulls in `yt-dlp` and
-`ffmpeg` automatically:
+**Homebrew (macOS)** — installs `addsong` and pulls in `yt-dlp` and `ffmpeg`:
 
 ```bash
 brew install YOURNAME/tap/addsong
@@ -28,10 +31,15 @@ brew install YOURNAME/tap/addsong
 <!-- Replace YOURNAME with your GitHub username once the tap is published.
      See RELEASE.md for the publish steps. -->
 
-**Manual** — if you'd rather not use the tap:
+**Manual (any platform)** — install the two dependencies yourself, then drop the
+script on your `PATH`:
 
 ```bash
-brew install yt-dlp ffmpeg          # dependencies
+# dependencies (pick one per platform):
+#   macOS:  brew install yt-dlp ffmpeg
+#   Win*:   choco install yt-dlp ffmpeg   (in Git Bash / WSL)
+#   Debian: sudo apt install yt-dlp ffmpeg
+#   Arch:   sudo pacman -S yt-dlp ffmpeg
 mkdir -p ~/bin
 mv addsong ~/bin/addsong
 chmod +x ~/bin/addsong
@@ -40,24 +48,57 @@ chmod +x ~/bin/addsong
 If `~/bin` isn't already on your `PATH`, add it (then open a new terminal):
 
 ```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc        # macOS (zsh)
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc       # Linux / Git Bash
 ```
 
-### Confirm the watch folder works
+### Confirm the watch folder
 
-Apple Music auto-imports anything dropped into:
+`addsong` drops tagged files into a watch folder that your music app scans.
+The default is detected per platform — override with `ADDSONG_WATCH_DIR` only
+if your library lives elsewhere.
+
+**macOS** — Apple Music auto-imports from:
 
 ```
 ~/Music/Music/Media.localized/Automatically Add to Music.localized/
 ```
 
-Open the **Music** app, drop any `.m4a`/`.mp3` into that folder, and it should appear
-in your library within a couple seconds. If it does, you're ready. (If your library
-lives elsewhere, find the path in **Music > Settings > Files** and set
-`ADDSONG_WATCH_DIR` to the `Automatically Add to Music` folder inside it.)
+Open the **Music** app, drop any `.m4a`/`.mp3` into that folder, and it should
+appear in your library within a couple of seconds. (Find the path under
+**Music > Settings > Files** if your library isn't in the default location.)
 
-> The first time `addsong` writes there, macOS may ask your terminal for permission
-> to access the Music folder. Click **Allow**.
+> The first time `addsong` writes there, macOS may prompt your terminal for
+> permission to access the Music folder. Click **Allow**.
+
+**Windows** — needs [Git Bash](https://git-scm.com/downloads) (or WSL). The watch
+folder is one of (the script probes both):
+
+```
+%USERPROFILE%\Music\Apple Music\Media\Automatically Add to Apple Music    (new Apple Music preview app)
+%USERPROFILE%\Music\iTunes\iTunes Media\Automatically Add to iTunes       (legacy iTunes)
+```
+
+Open the Apple Music preview app (or iTunes) **at least once** so it creates its
+library and watch folder, then re-run `addsong`. With the app running, files
+import on the spot; with it closed, the next launch imports them.
+
+> Use `.m4a` (the default). Legacy iTunes can't decode `.flac` and quietly
+> moves such files to a `Not Added` subfolder instead of importing them.
+
+**Linux / WSL without a Windows library** — there's no Apple Music app, so
+`addsong` writes to an output folder you can import into any player:
+
+```
+~/Music/addsong/
+```
+
+The script creates this folder on first run and prints where it is. To use the
+Apple Music watch folder from WSL instead, point at the Windows path:
+
+```bash
+export ADDSONG_WATCH_DIR="/mnt/c/Users/you/Music/Apple Music/Media/Automatically Add to Apple Music"
+```
 
 ## Usage
 
@@ -113,7 +154,7 @@ can be annotated:
 # preview what a list would import, without downloading
 addsong --from songs.txt --dry-run
 
-# pipe in URLs from anywhere
+# pipe in URLs from anywhere (pbpaste on macOS; xclip -o / powershell gcb on Linux/Win)
 pbpaste | addsong --from -
 ```
 
@@ -123,7 +164,7 @@ Configured with environment variables:
 
 | Variable               | Purpose                            | Default                                |
 |------------------------|------------------------------------|----------------------------------------|
-| `ADDSONG_WATCH_DIR`    | Apple Music watch folder           | standard macOS path                    |
+| `ADDSONG_WATCH_DIR`    | Watch / output folder              | auto-detected per OS (see Setup)       |
 | `ADDSONG_AUDIO_FORMAT` | Output audio format                | `m4a`                                  |
 | `ADDSONG_LEDGER`       | Imported-tracks list (dedup)       | `~/.local/state/addsong/imported.tsv`  |
 | `ADDSONG_RETRIES`      | Extra attempts on transient errors | `2`                                    |
@@ -154,11 +195,15 @@ ADDSONG_WATCH_DIR="/Volumes/Music/Automatically Add to Music.localized"
   to preview what would import before committing.
 - **Duplicates** are tracked by video ID, so re-runs skip songs already imported.
   Use `--force` to override.
-- **Syncing to your phone** is handled by Apple, not this tool. Tracks have to upload
-  from your Mac to iCloud (they aren't in Apple's catalog), so keep the Mac open and
-  online, and make sure *Sync Library* is on for both devices.
-- Some videos (private, region-locked, age-gated) may fail to download. Keep `yt-dlp`
-  current (`brew upgrade yt-dlp`) — an outdated version is the usual cause.
+- **Syncing to your phone** is handled by Apple, not this tool. Tracks have to
+  upload from your computer to iCloud (they aren't in Apple's catalog), so keep
+  the Mac/PC open and online, and make sure *Sync Library* is on for both
+  devices. On Linux / WSL output-only mode there's no sync — move the file into
+  your library of choice yourself.
+- Some videos (private, region-locked, age-gated) may fail to download. Keep
+  `yt-dlp` current (`brew upgrade yt-dlp` / `choco upgrade yt-dlp` /
+  `sudo pacman -Syu yt-dlp` / distro upgrade) — an outdated version is the
+  usual cause.
 
 ## Development
 

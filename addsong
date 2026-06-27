@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 #
-# addsong: download a song from a URL and have it auto-import into Apple Music.
+# addsong: download a song from a URL (or YouTube search) and have it
+# auto-import into Apple Music on macOS / Windows, or saved to a folder on
+# Linux (no Apple Music app there).
 #
-#   addsong "https://www.youtube.com/watch?v=..."          single track
+#   addsong "https://www.youtube.com/watch?v=..."          single track (URL)
+#   addsong "rick astley never gonna give you up"           top YouTube result
+#   addsong --search 3 "80s disco mix"                      top 3 results
 #   addsong --playlist "https://www.youtube.com/playlist?list=..."
 #
 # Pipeline (per track):
@@ -11,7 +15,7 @@
 #   3. show it and let you accept or edit the artist/title (interactive runs)
 #   4. skip it if it was imported before (duplicate guard)
 #   5. yt-dlp downloads the audio; ffmpeg embeds artwork and your chosen tags
-#   6. move the tagged file into Apple Music's "Automatically Add to Music" folder
+#   6. move the tagged file into the watch folder (Apple Music / iTunes / output)
 #
 # See ARCHITECTURE.md / SETUP.md for the full design.
 
@@ -21,7 +25,7 @@ set -euo pipefail
 # Config (all overridable via environment)
 # ---------------------------------------------------------------------------
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 # Load defaults from a config file of KEY=VALUE lines (parsed, not sourced, so it
 # can't run arbitrary code). Only ADDSONG_* keys are honored, and a value already
@@ -39,8 +43,10 @@ if [[ -f "$CONFIG_FILE" ]]; then
   unset _k _v
 fi
 
-WATCH_DIR_DEFAULT="$HOME/Music/Music/Media.localized/Automatically Add to Music.localized"
-WATCH_DIR="${ADDSONG_WATCH_DIR:-$WATCH_DIR_DEFAULT}"
+# Watch folder is OS-dependent; the default is computed in main() via
+# default_watch_dir() so the helper can probe per platform. ADDSONG_WATCH_DIR
+# (if set) always wins.
+WATCH_DIR=""
 AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
 # Ledger of already-imported tracks, keyed by video id (duplicate detection).
 LEDGER="${ADDSONG_LEDGER:-$HOME/.local/state/addsong/imported.tsv}"
@@ -68,6 +74,7 @@ N_SKIPPED=0
 N_FAILED=0
 
 have_tty=0   # set in main(); declared here so it is defined when sourced
+OS_MODE=""   # ditto (mac / win / wsl / linux / other)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -156,6 +163,62 @@ safe_name() {
   s="${s//:/_}"     # colon
   s="${s//\\/_}"    # backslash
   printf '%s' "$s"
+}
+
+# Detect the host platform. Returns one of: mac / win / wsl / linux / other.
+# Pure: reads $OSTYPE and (on Linux) the kernel release for the WSL signature.
+detect_os() {
+  case "${OSTYPE:-}" in
+    darwin*)            echo mac ;;
+    msys*|cygwin*)      echo win ;;
+    linux*)
+      if [[ -r /proc/sys/kernel/osrelease ]] \
+         && grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+        echo wsl
+      else
+        echo linux
+      fi
+      ;;
+    *)                  echo other ;;
+  esac
+}
+
+# Default watch folder per OS. On mac this is Apple Music's autoscan folder;
+# on win/wsl it probes the Apple Music preview app then legacy iTunes, falling
+# back to the preview path if neither exists yet (preflight guides the user);
+# on linux/other (no Apple Music app) it returns an output-only folder.
+default_watch_dir() {
+  local os d base
+  os="${OS_MODE:-$(detect_os)}"
+  case "$os" in
+    mac)
+      printf '%s\n' \
+        "$HOME/Music/Music/Media.localized/Automatically Add to Music.localized" ;;
+    win)
+      base="${USERPROFILE:-$HOME}"
+      for d in \
+        "$base/Music/Apple Music/Media/Automatically Add to Apple Music" \
+        "$base/Music/iTunes/iTunes Media/Automatically Add to iTunes"; do
+        [[ -d "$d" ]] && { printf '%s\n' "$d"; return 0; }
+      done
+      # Neither found -- return the documented default; preflight guides the
+      # user to open the Apple Music preview app once (which creates it).
+      printf '%s\n' \
+        "$base/Music/Apple Music/Media/Automatically Add to Apple Music"
+      ;;
+    wsl)
+      # Match /mnt/<drive>/Users/<user>/Music/Apple Music/Media/... (or iTunes)
+      for d in \
+        /mnt/[c-z]/Users/*/Music/Apple\ Music/Media/Automatically\ Add\ to\ Apple\ Music \
+        /mnt/[c-z]/Users/*/Music/iTunes/iTunes\ Media/Automatically\ Add\ to\ iTunes; do
+        [[ -d "$d" ]] && { printf '%s\n' "$d"; return 0; }
+      done
+      # No Windows Apple Music library reachable -- output-only fallback.
+      printf '%s\n' "${HOME:-/tmp}/Music/addsong" ;;
+    *)
+      # linux and any other platform: no Apple Music app, output to a folder.
+      printf '%s\n' "${HOME:-/tmp}/Music/addsong" ;;
+  esac
 }
 
 ledger_has() {
@@ -388,7 +451,13 @@ note_imported() {
   # $1 = how many were added
   [[ "$DRYRUN" -eq 1 ]] && return 0
   [[ "$1" -gt 0 ]] || return 0
-  printf '\nApple Music will import shortly. Make sure the Music app is open.\n'
+  case "${OS_MODE:-}" in
+    mac|win|wsl)
+      printf '\nApple Music will import shortly. Make sure the Music app is open.\n' ;;
+    *)
+      printf '\nSaved %d track(s) to: %s\n' "$1" "$WATCH_DIR"
+      printf 'No Apple Music app on %s -- import them into your library of choice.\n' "${OS_MODE:-this platform}" ;;
+  esac
 }
 
 # Process a stream of URLs (one per line on stdin), updating the run tallies.
@@ -468,20 +537,51 @@ main() {
     SEARCH=1
   fi
 
-  # Preflight: required tools and a writable watch folder.
+  # Resolve platform + watch folder. ADDSONG_WATCH_DIR always wins.
+  OS_MODE="$(detect_os)"
+  WATCH_DIR="${ADDSONG_WATCH_DIR:-$(default_watch_dir)}"
+
+  # Preflight: required tools.
   for tool in yt-dlp ffmpeg; do
     command -v "$tool" >/dev/null 2>&1 \
       || die "'$tool' not found on PATH.
-Install the dependencies with:   brew install yt-dlp ffmpeg
-(Or install $PROG via Homebrew, which pulls them in automatically -- see the README.)"
+Install yt-dlp and ffmpeg (e.g. brew install yt-dlp ffmpeg on macOS,
+choco install yt-dlp ffmpeg on Windows, or use your distro's package manager).
+See SETUP.md."
   done
 
+  # Preflight: watch folder. mac/win/wsl expect an Apple Music app folder to
+  # exist; linux/other run output-only and create the fallback dir themselves.
   if [[ ! -d "$WATCH_DIR" ]]; then
-    die "Apple Music watch folder not found:
+    case "$OS_MODE" in
+      mac)
+        die "Apple Music watch folder not found:
     $WATCH_DIR
 Open Music > Settings > Files to find your 'Music Media folder location',
 then set ADDSONG_WATCH_DIR to the 'Automatically Add to Music' folder inside it.
-See SETUP.md (Step 2)."
+See SETUP.md." ;;
+      win)
+        die "Apple Music watch folder not found:
+    $WATCH_DIR
+Open the Apple Music preview app (or iTunes) at least once so it creates the
+folder, then re-run. Or set ADDSONG_WATCH_DIR to your library's
+'Automatically Add to ...' folder. See SETUP.md." ;;
+      wsl)
+        die "Apple Music watch folder not found:
+    $WATCH_DIR
+Open the Apple Music preview app (or iTunes) in Windows at least once so it
+creates the folder. From WSL, point ADDSONG_WATCH_DIR at the Windows path,
+e.g. /mnt/c/Users/you/Music/Apple Music/Media/Automatically Add to Apple Music.
+See SETUP.md." ;;
+      *)
+        # Output-only: macOS Apple Music app doesn't exist here. Ensure the
+        # fallback folder exists and continue; import is the user's job.
+        mkdir -p "$WATCH_DIR" \
+          || die "cannot create output folder: $WATCH_DIR"
+        err "note: no Apple Music app on $OS_MODE; output folder is:"
+        err "      $WATCH_DIR"
+        err "      import files into your library of choice manually." ;;
+    esac
   fi
 
   have_tty=0
