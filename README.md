@@ -183,6 +183,9 @@ you can edit it by hand if you like:
 | `--edit`       | Always prompt to review (even for each track in a playlist)  |
 | `--force`      | Import even if the track was imported before                 |
 | `--dry-run`    | Resolve and show metadata; download/import nothing           |
+| `--quiet`      | Suppress info banners and per-track status lines (errors still print) |
+| `--verbose`    | Surface `yt-dlp` / `ffmpeg` stderr for troubleshooting       |
+| `--no-color`   | Disable colored output (also honors the `NO_COLOR` env var)  |
 | `-h`,`--help`  | Show help                                                   |
 
 Playlists and `--from` lists are non-interactive by default; add `--edit` to
@@ -222,6 +225,10 @@ ADDSONG_WATCH_DIR="/Volumes/Music/Automatically Add to Music.localized"
 
 ## Notes
 
+- **Progress feedback:** at a terminal, each track shows a spinner while it
+  fetches info and downloads, then collapses to a single colored `Added` /
+  `Skipped` / `Failed` line. The spinner is automatically suppressed when output
+  isn't a terminal (pipes, CI) and under `--quiet` / `--verbose`.
 - **Metadata** is cleaned automatically: junk like `(Official Video)`, `[4K]`,
   `(Lyrics)` is stripped, and `Artist - Title` is split out (falling back to the
   uploader as artist). When a source provides structured music tags (e.g. YouTube
@@ -243,7 +250,8 @@ ADDSONG_WATCH_DIR="/Volumes/Music/Automatically Add to Music.localized"
 - Some videos (private, region-locked, age-gated) may fail to download. Keep
   `yt-dlp` current (`brew upgrade yt-dlp` / `choco upgrade yt-dlp` /
   `sudo pacman -Syu yt-dlp` / distro upgrade) — an outdated version is the
-  usual cause.
+  usual cause. Re-run with `--verbose` to see the underlying `yt-dlp` / `ffmpeg`
+  error.
 
 ## Development
 

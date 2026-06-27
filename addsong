@@ -73,7 +73,10 @@ FORCE=0         # --force:    import even if the track is already in the ledger
 DRYRUN=0        # --dry-run:  resolve and show metadata; download/import nothing
 FROM_FILE=""    # --from F:   read URLs (one per line) from a file, or - for stdin
 SEARCH=0        # --search N: treat the arg as a free-text YouTube search (N results)
-SUBCMD=""       # the keyword verb (subscribe/unsubscribe/list/sync) when present
+SUBCMD=""       # the keyword verb (subscribe/unsubscribe/list/sync/help) when present
+QUIET=0         # --quiet:   suppress non-error info banners and status lines
+VERBOSE=0       # --verbose: surface yt-dlp/ffmpeg stderr
+NO_COLOR_FLAG=0 # --no-color: explicitly disable colored output
 
 # Tallies for the end-of-run summary
 N_ADDED=0
@@ -83,14 +86,47 @@ N_FAILED=0
 have_tty=0   # set in main(); declared here so it is defined when sourced
 OS_MODE=""   # ditto (mac / win / wsl / linux / other)
 
+# --- Colors / verbosity (set up in main once preflight runs) ----------------
+# Defaults leave all ANSI codes empty so the pure helpers below never emit
+# escape sequences -- tests or pipes see plain text. setup_colors() turns
+# them on only when stdout/stderr are a TTY, NO_COLOR isn't set, and
+# --no-color isn't requested (https://no-color.org/).
+C_ERR=""; C_S_ADDED=""; C_S_SKIPPED=""; C_S_FAILED=""; C_RESET=""
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-err()    { printf '%s: %s\n' "$PROG" "$*" >&2; }
+err()    { printf '%s%s:%s %s\n' "$C_ERR" "$PROG" "$C_RESET" "$*" >&2; }
 die()    { err "$*"; exit 1; }
-# Aligned one-line result, e.g.  "Added    Artist - Title"
-status() { printf '  %-8s %s\n' "$1" "$2"; }
+# Non-error info line (also to stderr); suppressed by --quiet. Used for
+# banners like "Searching YouTube for:" or "Syncing:".
+say()    { [[ "$QUIET" -eq 1 ]] || printf '%s\n' "$*" >&2; }
+# Aligned one-line result, e.g.  "Added    Artist - Title".
+# Caller passes a known keyword ("Added"/"Skipped"/"Would add"/...) -- we
+# color the common ones. Suppressed under --quiet.
+status() {
+  [[ "$QUIET" -eq 1 ]] && return 0
+  local keyword="$1" rest="$2" kcolor=""
+  case "$keyword" in
+    Added*|"Would add"*)           kcolor="$C_S_ADDED"   ;;
+    Skipped*|Already*|*subscribed*) kcolor="$C_S_SKIPPED" ;;
+    Failed*)                       kcolor="$C_S_FAILED"  ;;
+  esac
+  printf '  %s%-8s%s %s\n' "$kcolor" "$keyword" "$C_RESET" "$rest"
+}
+
+# Decide whether to colorize. Honors --no-color, NO_COLOR env, and non-TTY.
+setup_colors() {
+  if [[ "$NO_COLOR_FLAG" -eq 1 || -n "${NO_COLOR:-}" || "$have_tty" -eq 0 ]]; then
+    return 0
+  fi
+  C_ERR=$'\033[1;31m'      # bold red -- "progname:" error prefix
+  C_S_ADDED=$'\033[32m'    # green
+  C_S_SKIPPED=$'\033[33m'  # yellow
+  C_S_FAILED=$'\033[31m'   # red
+  C_RESET=$'\033[0m'
+}
 
 usage() {
   cat <<EOF
@@ -124,6 +160,10 @@ OPTIONS:
     --edit            Always prompt to review metadata (even for playlists).
     --force           Import even if this track was imported before.
     --dry-run         Resolve and show metadata; download/import nothing.
+    --quiet           Suppress info banners and per-track status lines
+                      (errors are still printed).
+    --verbose         Surface yt-dlp/ffmpeg stderr for troubleshooting.
+    --no-color        Disable colored output (also honors NO_COLOR).
     -h, --help        Show this help.
     --version         Print the version and exit.
 
@@ -311,7 +351,8 @@ subs_sync() {
   rev="$(interactive_for 1)"
   while IFS= read -r url; do
     [[ -z "$url" || "$url" == \#* ]] && continue
-    printf '\nSyncing: %s\n' "$url"
+    say ""
+    say "Syncing: $url"
     ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$url" 2>/dev/null)" \
       || { err "could not read playlist: $url"; N_FAILED=$((N_FAILED+1)); continue; }
     if [[ -z "$ids" ]]; then
@@ -332,14 +373,44 @@ run_ytdlp() {
   local out="$1" errf="$2"; shift 2
   local attempt=0 rc
   while :; do
-    yt-dlp "$@" >"$out" 2>"$errf" && return 0
+    if yt-dlp "$@" >"$out" 2>"$errf"; then
+      [[ "$VERBOSE" -eq 1 && -s "$errf" ]] && cat "$errf" >&2
+      return 0
+    fi
     rc=$?
+    [[ "$VERBOSE" -eq 1 && -s "$errf" ]] && cat "$errf" >&2
     if grep -qiE "$YTDLP_HARD_ERRORS" "$errf"; then return "$rc"; fi
     attempt=$((attempt + 1))
     [[ "$attempt" -gt "$RETRIES" ]] && return "$rc"
     err "transient error, retrying ($attempt/$RETRIES) in $((attempt * RETRY_DELAY))s..."
     sleep "$((attempt * RETRY_DELAY))"
   done
+}
+
+# Run a command while showing an animated spinner on /dev/tty, then clear the
+# line. The command's own stdout/stderr are untouched (callers capture them to
+# files), so this is purely cosmetic progress feedback.
+#   $1 = label shown next to the spinner; remaining args = the command to run.
+# Falls back to running the command synchronously (no spinner) when there is no
+# TTY, under --quiet, or under --verbose (so passed-through output stays clean).
+with_spinner() {
+  local label="$1"; shift
+  if [[ "$have_tty" -eq 0 || "$QUIET" -eq 1 || "$VERBOSE" -eq 1 ]]; then
+    "$@"
+    return $?
+  fi
+  local -a frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  "$@" &
+  local pid=$! i=0 rc=0
+  # Hide the cursor while spinning; restore it when we're done.
+  printf '\033[?25l' > /dev/tty
+  while kill -0 "$pid" 2>/dev/null; do
+    printf '\r  %s %s' "${frames[i++ % ${#frames[@]}]}" "$label" > /dev/tty
+    sleep 0.1
+  done
+  wait "$pid" || rc=$?
+  printf '\r\033[K\033[?25h' > /dev/tty   # clear the line and show the cursor
+  return "$rc"
 }
 
 # Interactive review. Reads/writes /dev/tty so it works mid-pipeline.
@@ -392,7 +463,8 @@ process_one() {
 
   metaf="$(mktemp "${TMPDIR:-/tmp}/addsong.meta.XXXXXX")"
   errf="$(mktemp "${TMPDIR:-/tmp}/addsong.err.XXXXXX")"
-  if ! run_ytdlp "$metaf" "$errf" --no-playlist --retries 3 --socket-timeout 30 \
+  if ! with_spinner "Reading info" \
+        run_ytdlp "$metaf" "$errf" --no-playlist --retries 3 --socket-timeout 30 \
         --print '%(id)s' --print '%(title)s' --print '%(uploader)s' \
         --print '%(track)s' --print '%(artist)s' --print '%(album)s' \
         --print '%(release_year)s' --print '%(track_number)s' -- "$url"; then
@@ -467,7 +539,8 @@ process_one() {
   local staging staged final
   staging="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
 
-  if ! run_ytdlp /dev/null "$staging/dl.err" \
+  if ! with_spinner "Downloading  $artist - $title" \
+        run_ytdlp /dev/null "$staging/dl.err" \
         --no-playlist --retries 3 --fragment-retries 3 --socket-timeout 30 \
         --extract-audio --audio-format "$AUDIO_FORMAT" --audio-quality 0 \
         --embed-thumbnail --convert-thumbnails jpg \
@@ -498,11 +571,12 @@ process_one() {
 
   if ! ffmpeg -y -loglevel error -i "$staged" -map 0 -c copy \
         "${tagargs[@]}" \
-        "$final" >/dev/null 2>&1; then
-    err "tagging failed: $artist - $title"
+        "$final" >/dev/null 2>"$staging/ff.err"; then
+    err "tagging failed: $artist - $title ($(grep -i 'error' "$staging/ff.err" | tail -n1))"
     rm -rf "$staging"
     return 1
   fi
+  [[ "$VERBOSE" -eq 1 && -s "$staging/ff.err" ]] && cat "$staging/ff.err" >&2
   if [[ ! -s "$final" ]]; then
     err "tagging produced an empty file: $artist - $title"
     rm -rf "$staging"
@@ -547,10 +621,12 @@ note_imported() {
   [[ "$1" -gt 0 ]] || return 0
   case "${OS_MODE:-}" in
     mac|win|wsl)
-      printf '\nApple Music will import shortly. Make sure the Music app is open.\n' ;;
+      say ""
+      say "Apple Music will import shortly. Make sure the Music app is open." ;;
     *)
-      printf '\nSaved %d track(s) to: %s\n' "$1" "$WATCH_DIR"
-      printf 'No Apple Music app on %s -- import them into your library of choice.\n' "${OS_MODE:-this platform}" ;;
+      say ""
+      say "Saved $1 track(s) to: $WATCH_DIR"
+      say "No Apple Music app on ${OS_MODE:-this platform} -- import them into your library of choice." ;;
   esac
 }
 
@@ -576,8 +652,8 @@ run_url_stream() {
 finish_batch() {
   local verb="Added"
   [[ "$DRYRUN" -eq 1 ]] && verb="Would add"
-  printf '\nDone. %s %d, skipped %d, failed %d.\n' \
-    "$verb" "$N_ADDED" "$N_SKIPPED" "$N_FAILED"
+  say ""
+  say "Done. $verb $N_ADDED, skipped $N_SKIPPED, failed $N_FAILED."
   note_imported "$N_ADDED"
   [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
 }
@@ -613,6 +689,9 @@ main() {
       --edit)      EDIT_FORCE=1 ;;
       --force)     FORCE=1 ;;
       --dry-run)   DRYRUN=1 ;;
+      --quiet)     QUIET=1 ;;
+      --verbose)   VERBOSE=1 ;;
+      --no-color)  NO_COLOR_FLAG=1 ;;
       --search)    SEARCH="${2:-}"; [[ -n "$SEARCH" ]] || die "--search needs a number (e.g. --search 3)"
                    [[ "$SEARCH" =~ ^[1-9][0-9]*$ ]] || die "--search needs a positive integer (got: '$SEARCH')"
                    (( SEARCH <= 50 )) || die "--search is capped at 50 (use a playlist URL for more)"
@@ -708,14 +787,21 @@ See SETUP.md." ;;
         # fallback folder exists and continue; import is the user's job.
         mkdir -p "$WATCH_DIR" \
           || die "cannot create output folder: $WATCH_DIR"
-        err "note: no Apple Music app on $OS_MODE; output folder is:"
-        err "      $WATCH_DIR"
-        err "      import files into your library of choice manually." ;;
+        say "note: no Apple Music app on $OS_MODE; output folder is:"
+        say "      $WATCH_DIR"
+        say "      import files into your library of choice manually." ;;
     esac
   fi
 
+  # Detect a usable controlling terminal by actually opening /dev/tty
+  # read-write. The cheaper [[ -e/-r /dev/tty ]] test passes even when there is
+  # no controlling terminal (cron, CI, some piped contexts), where opening it
+  # fails with ENXIO -- so probe the open, which is what the spinner and the
+  # interactive prompts really need. The redirection is on a group command (not
+  # exec) so a failure just marks no-TTY instead of exiting the shell.
   have_tty=0
-  [[ -e /dev/tty && -r /dev/tty ]] && have_tty=1
+  if { true; } 2>/dev/null <>/dev/tty; then have_tty=1; fi
+  setup_colors
 
   # 'sync' was peeked earlier but needs preflight, so it falls through to here.
   [[ "$SUBCMD" == "sync" ]] && subs_sync
@@ -730,7 +816,7 @@ See SETUP.md." ;;
     fi
     finish_batch
   elif [[ "$PLAYLIST" -eq 1 ]]; then
-    printf 'Reading playlist...\n'
+    say "Reading playlist..."
     ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
       || die "could not read playlist: $URL"
     [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
@@ -740,7 +826,7 @@ See SETUP.md." ;;
       <<< "$(printf '%s\n' "$ids" | sed '/^$/d; s#^#https://www.youtube.com/watch?v=#')"
     finish_batch
   elif [[ "$SEARCH" -gt 0 ]]; then
-    printf 'Searching YouTube for: %s\n' "$URL"
+    say "Searching YouTube for: $URL"
     ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "ytsearch${SEARCH}:${URL}" 2>/dev/null)" \
       || die "search failed: $URL"
     [[ -n "$ids" ]] || die "no search results for: $URL"
