@@ -10,13 +10,13 @@
   <a href="#linux"><img src="assets/linux.svg" height="48" alt="Linux"></a>
 </p>
 
+That one command grabs the song, adds the **title, artist, and cover art**, and
+hands it to Apple Music. The song appears in your library a second later; no
+dragging files around.
+
 ```bash
 addsong "https://www.youtube.com/watch?v=..."
 ```
-
-That one command grabs the song, adds the **title, artist, and cover art**, and
-hands it to Apple Music. The song appears in your library a second later — no
-dragging files around.
 
 Don't have a link? Just type the song's name:
 
@@ -24,64 +24,32 @@ Don't have a link? Just type the song's name:
 addsong "songname"
 ```
 
-**Note:** Songs come from YouTube (and other sites). Only download what you have
-the right to.
-
-### Install
+## Install
 
 One command for your OS installs `addsong` **and** the two free tools it needs
 (`yt-dlp` and `ffmpeg`). Then open a new terminal and run `addsong --version`.
 
-**macOS** (Homebrew):
+### <img src="assets/macos.svg" height="18" align="absmiddle">&nbsp;macOS (Homebrew)
 
 ```bash
 brew install ado11231/tap/addsong
 ```
 
-**Linux / WSL** (paste into a terminal):
+### <img src="assets/linux.svg" height="18" align="absmiddle">&nbsp;Linux / WSL
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ado11231/apple-music-pipeline/main/install.sh | bash
 ```
 
-**Windows** (paste into **PowerShell**):
+### <img src="assets/windows.svg" height="18" align="absmiddle">&nbsp;Windows
+
+Paste into **PowerShell**:
 
 ```powershell
 irm https://raw.githubusercontent.com/ado11231/apple-music-pipeline/main/install.ps1 | iex
 ```
 
-<details>
-<summary>Prefer to install by hand? (or no installer for your setup)</summary>
-
-**1. Download `addsong`.** Use the green **Code** button near the top of this
-page → **Download ZIP**, then unzip it.
-
-**2. Get the two free tools it uses** — `yt-dlp` (downloads songs) and `ffmpeg`
-(converts them):
-
-```bash
-choco install yt-dlp ffmpeg         # Windows (run inside Git Bash or WSL)
-sudo apt install yt-dlp ffmpeg      # Debian / Ubuntu
-sudo pacman -S yt-dlp ffmpeg        # Arch
-```
-
-**3. Put `addsong` where your terminal can find it:**
-
-```bash
-mkdir -p ~/bin && mv addsong ~/bin/ && chmod +x ~/bin/addsong
-```
-
-**Got `command not found`?** Run this once, reopen your terminal, and try again:
-
-```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc   # use ~/.zshrc on a Mac
-```
-
-</details>
-
-### Add Your First Song
-
-Type any song's name — no link needed:
+## Add Your First Song
 
 ```bash
 addsong "songname"
@@ -100,60 +68,37 @@ addsong "songname"
 
 Press **Enter** and it lands in Apple Music. That's the whole thing.
 
-### Where Your Songs Go
+## Where Your Songs Go
 
-`addsong` saves songs where your music app imports them, and finds that spot on
-its own. **You only need this section if a song doesn't show up** — plus the
-one-time notes for Windows and Linux.
+`addsong` picks the folder for you. You only need this if a song doesn't show up.
 
-#### <img src="assets/macos.svg" height="18" align="absmiddle">&nbsp;macOS
+### <img src="assets/macos.svg" height="18" align="absmiddle">&nbsp;macOS
 
-Songs go here, and Apple Music imports them on its own:
+Apple Music imports from:
 
-```
-~/Music/Music/Media.localized/Automatically Add to Music.localized/
-```
+`~/Music/Music/Media.localized/Automatically Add to Music.localized/`
 
-If nothing shows up, your library may live elsewhere. Find it under
-**Music → Settings → Files**, then tell `addsong` where it is:
+If nothing appears, check **Music → Settings → Files**. macOS may ask for folder
+access the first time — click **Allow**.
 
-```bash
-export ADDSONG_WATCH_DIR="/path/to/Automatically Add to Music.localized"
-```
+### <img src="assets/windows.svg" height="18" align="absmiddle">&nbsp;Windows
 
-**Note:** The first time it saves a song, macOS may ask for permission to use
-the Music folder. Click **Allow**.
+Run `addsong` in **Git Bash** or **WSL**. Open **Apple Music** (or iTunes) once
+so it creates the import folder. Use the default `.m4a` format — older iTunes skips
+`.flac`.
 
-#### <img src="assets/windows.svg" height="18" align="absmiddle">&nbsp;Windows
+### <img src="assets/linux.svg" height="18" align="absmiddle">&nbsp;Linux
 
-You'll run `addsong` inside **Git Bash** or **WSL**. **Open the Apple Music app
-(or iTunes) once** so it creates your library — then `addsong` can find it.
+No Apple Music on Linux. Files go to `~/Music/addsong/` for you to import
+manually.
 
-**Tip:** Keep the default `.m4a` format. Older iTunes can't play `.flac` and
-quietly skips those files.
-
-If your library is on another drive, point at it directly:
+Wrong folder? Point `addsong` anywhere:
 
 ```bash
-export ADDSONG_WATCH_DIR="D:/iTunes/iTunes Media/Automatically Add to iTunes"
+export ADDSONG_WATCH_DIR="/path/to/your/folder"
 ```
 
-#### <img src="assets/linux.svg" height="18" align="absmiddle">&nbsp;Linux
-
-There's no Apple Music on Linux, so songs are saved to a folder instead:
-
-```
-~/Music/addsong/
-```
-
-`addsong` makes this folder and prints where it is. Add the files to any music
-player you like. To use a different folder:
-
-```bash
-export ADDSONG_WATCH_DIR="/srv/music/inbox"
-```
-
-### More Ways To Add Songs
+## More Ways To Add Songs
 
 ```bash
 # paste a link instead of a name
@@ -166,7 +111,7 @@ addsong --search 3 "80s disco mix"
 addsong --playlist "https://www.youtube.com/playlist?list=..."
 ```
 
-#### Follow A Playlist
+### Follow A Playlist
 
 Subscribe once, then grab new songs whenever you want — it skips anything you
 already have:
@@ -179,7 +124,7 @@ addsong sync                                                      # grab new son
 
 Stop following with `addsong unsubscribe "<link>"`.
 
-#### Start Over
+### Start Over
 
 `addsong` remembers what it has already imported so it never adds the same song
 twice. To wipe that memory — so the next add or `sync` treats every song as new
@@ -192,39 +137,59 @@ addsong clear-ledger -y     # skip the confirmation
 
 To re-add just one song you already have, use `--force` instead.
 
-### All The Options
+## All The Options
 
 The ones you'll reach for most:
 
-| Flag          | What it does                                    |
-| ------------- | ----------------------------------------------- |
-| `--search N`  | Show the top N matches and let you pick (1–50). |
-| `--playlist`  | Add every song in a playlist.                   |
-| `--from FILE` | Add every link in a file, one per line.         |
-| `-y`          | Skip the confirm prompt and just add it.        |
-| `--edit`      | Always let you fix the title first.             |
+- `--search N` — Show the top N matches and let you pick (1–50).
+- `--playlist` — Add every song in a playlist.
+- `--from FILE` — Add every link in a file, one per line.
+- `-y` — Skip the confirm prompt and just add it.
+- `--edit` — Always let you fix the title first.
 
 And a few for when you need them:
 
-| Flag         | What it does                                   |
-| ------------ | ---------------------------------------------- |
-| `--force`    | Add a song again even if you already have it.  |
-| `--dry-run`  | Preview what would happen — downloads nothing. |
-| `--no-progress` | Use the spinner instead of the download bar. |
-| `--verbose`  | Show the full error when something breaks.     |
-| `--quiet`    | Show only errors, nothing else.                |
-| `--no-color` | Turn off colored text.                         |
-| `--help`     | List every command and option.                 |
-| `--version`  | Print the installed version and exit.          |
+- `--force` — Add a song again even if you already have it.
+- `--dry-run` — Preview what would happen; downloads nothing.
+- `--format FMT` — Output format (e.g. `mp3`, `flac`, `opus`); default `m4a`.
+- `--quality N` — Audio quality `0`–`10`, where `0` is best (default `0`).
+- `--notify` — Pop a desktop notification as each song imports.
+- `--no-progress` — Use the spinner instead of the download bar.
+- `--verbose` — Show the full error when something breaks.
+- `--quiet` — Show only errors, nothing else.
+- `--no-color` — Turn off colored text.
+- `--help` — List every command and option.
+- `--version` — Print the installed version and exit.
 
 Want to set something permanently? A few defaults live in environment variables —
 the main one is `ADDSONG_WATCH_DIR` (where songs are saved). Run `addsong --help`
 for the full list.
 
-### When Something Goes Wrong
+## Tab Completion
+
+Tab-complete subcommands and flags in your shell. The Homebrew install wires this
+up automatically. Otherwise, point your shell at the scripts in
+[`completions/`](completions):
+
+**bash** — add to your `~/.bashrc`:
+
+```bash
+source /path/to/addsong/completions/addsong.bash
+```
+
+**zsh** — put `_addsong` on your `fpath` and enable completion in `~/.zshrc`:
+
+```zsh
+fpath=(/path/to/addsong/completions $fpath)
+autoload -U compinit && compinit
+```
+
+Open a new terminal, then type `addsong ` and press **Tab**.
+
+## When Something Goes Wrong
 
 - **`command not found: yt-dlp` (or `ffmpeg`).** You're missing the two tools —
-  install them (step 2 of [Install](#install)).
+  re-run [Install](#install) for your OS.
 - **A song wouldn't download.** It may be private or blocked in your country.
   More often `yt-dlp` is just out of date — update it
   (`brew upgrade yt-dlp` / `choco upgrade yt-dlp` / `sudo pacman -Syu yt-dlp`),
@@ -237,7 +202,7 @@ for the full list.
   isn't always the real one — use `--edit` to fix it, or `--dry-run` to preview
   before adding.
 
-### For Developers
+## For Developers
 
 `addsong` is one self-contained Bash script — its functions can be sourced and
 tested without touching the network. Before opening a pull request, run the same

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# addsong: download a song from a URL (or YouTube search) and have it
-# auto-import into Apple Music on macOS / Windows, or saved to a folder on
+# addsong: Download a song from a URL (or YouTube search) and have it
+# auto-import into Apple Music on macOS / Windows, or save it to a folder on
 # Linux (no Apple Music app there).
 #
 #   addsong "https://www.youtube.com/watch?v=..."          single track (URL)
@@ -12,34 +12,32 @@
 #   addsong sync                                            # import new tracks from every subscription
 #
 # Pipeline (per track):
-#   1. read the scraped title/uploader (no download yet)
-#   2. clean it up (strip "(Official Video)", "[4K]"; split "Artist - Title")
-#   3. show it and let you accept or edit the artist/title (interactive runs)
-#   4. skip it if it was imported before (duplicate guard)
-#   5. yt-dlp downloads the audio; ffmpeg embeds artwork and your chosen tags
-#   6. move the tagged file into the watch folder (Apple Music / iTunes / output)
+#   1. Read the scraped title/uploader (no download yet).
+#   2. Clean it up (strip "(Official Video)", "[4K]"; split "Artist - Title").
+#   3. Show it and let you accept or edit the artist/title (interactive runs).
+#   4. Skip it if it was imported before (duplicate guard).
+#   5. yt-dlp downloads the audio; ffmpeg embeds artwork and your chosen tags.
+#   6. Move the tagged file into the watch folder (Apple Music / iTunes / output).
 #
 # See the README (Setup) and ARCHITECTURE.md for the full design.
 
 set -euo pipefail
 
-# ---------------------------------------------------------------------------
 # Config (all overridable via environment)
-# ---------------------------------------------------------------------------
 
 VERSION="1.3.0"
 
 # Load defaults from a config file of KEY=VALUE lines (parsed, not sourced, so it
-# can't run arbitrary code). Only ADDSONG_* keys are honored, and a value already
+# cannot run arbitrary code). Only ADDSONG_* keys are honored, and a value already
 # set in the environment always wins over the file.
 CONFIG_FILE="${ADDSONG_CONFIG:-$HOME/.config/addsong/config}"
 if [[ -f "$CONFIG_FILE" ]]; then
   while IFS='=' read -r _k _v; do
     _k="${_k//[[:space:]]/}"
     [[ -z "$_k" || "$_k" == \#* || "$_k" != ADDSONG_* ]] && continue
-    _v="${_v#"${_v%%[![:space:]]*}"}"   # trim leading whitespace
-    _v="${_v%\"}"; _v="${_v#\"}"        # strip surrounding double quotes
-    _v="${_v%\'}"; _v="${_v#\'}"        # strip surrounding single quotes
+    _v="${_v#"${_v%%[![:space:]]*}"}"   # Trim leading whitespace.
+    _v="${_v%\"}"; _v="${_v#\"}"        # Strip surrounding double quotes.
+    _v="${_v%\'}"; _v="${_v#\'}"        # Strip surrounding single quotes.
     [[ -z "${!_k+set}" ]] && export "$_k=$_v"
   done < "$CONFIG_FILE"
   unset _k _v
@@ -53,20 +51,17 @@ AUDIO_FORMAT="${ADDSONG_AUDIO_FORMAT:-m4a}"
 # yt-dlp VBR quality for the extracted audio: 0 (best) .. 10 (worst). Overridable
 # per run with --quality; the env var sets the default.
 AUDIO_QUALITY="${ADDSONG_AUDIO_QUALITY:-0}"
-# Audio formats accepted by --format. Limited to formats whose yt-dlp
-# --audio-format name equals the output file extension, since the importer
-# looks the staged file up as "<id>.<format>" (e.g. vorbis->.ogg, alac->.m4a,
-# best->varies would break that, so they're intentionally excluded).
-AUDIO_FORMATS='m4a mp3 flac opus wav aac'
+# Audio formats accepted by --format (mirrors yt-dlp's --audio-format choices).
+AUDIO_FORMATS='m4a mp3 flac opus vorbis wav aac alac best'
 # Ledger of already-imported tracks, keyed by video id (duplicate detection).
 LEDGER="${ADDSONG_LEDGER:-$HOME/.local/state/addsong/imported.tsv}"
-# Subscribed playlists (one URL per line, # comments allowed). 'sync' expands
-# each and the ledger dedups already-imported tracks -- the subscription file
-# holds URLs only, no "last seen" marker.
+# Subscribed playlists (one URL per line; # comments allowed). The sync
+# subcommand expands each URL; the ledger deduplicates already-imported tracks.
+# The subscription file holds URLs only (no "last seen" marker).
 SUBSCRIPTIONS="${ADDSONG_SUBSCRIPTIONS:-$HOME/.local/state/addsong/subscribed.tsv}"
 # Retry behavior for transient (network) yt-dlp failures.
-RETRIES="${ADDSONG_RETRIES:-2}"          # extra attempts after the first
-RETRY_DELAY="${ADDSONG_RETRY_DELAY:-3}"  # base backoff seconds (grows per attempt)
+RETRIES="${ADDSONG_RETRIES:-2}"          # Extra attempts after the first.
+RETRY_DELAY="${ADDSONG_RETRY_DELAY:-3}"  # Base backoff seconds (grows per attempt).
 
 # yt-dlp errors that are permanent: never worth retrying.
 YTDLP_HARD_ERRORS='private video|members-only|members only|video unavailable|this video is unavailable|is unavailable|has been removed|removed by the user|has been terminated|account.*terminated|confirm your age|age-restricted|sign in to confirm|not available in your country|not available on this app|blocked it in your country|copyright'
@@ -74,24 +69,24 @@ YTDLP_HARD_ERRORS='private video|members-only|members only|video unavailable|thi
 PROG="$(basename "$0")"
 
 # Flags
-PLAYLIST=0      # --playlist: expand a playlist URL into individual tracks
-ASSUME_YES=0    # -y/--yes:   never prompt; accept scraped/cleaned metadata
-EDIT_FORCE=0    # --edit:     always prompt to review (even in playlists)
-FORCE=0         # --force:    import even if the track is already in the ledger
-DRYRUN=0        # --dry-run:  resolve and show metadata; download/import nothing
-FROM_FILE=""    # --from F:   read URLs (one per line) from a file, or - for stdin
-SEARCH=0        # --search N: treat the arg as a free-text YouTube search (N results)
-SUBCMD=""       # the keyword verb (subscribe/unsubscribe/list/sync/clear-ledger) when present
-QUIET=0         # --quiet:   suppress non-error info banners and status lines
-VERBOSE=0       # --verbose: surface yt-dlp/ffmpeg stderr
-NO_COLOR_FLAG=0 # --no-color: explicitly disable colored output
-NOTIFY=0        # --notify:  fire a desktop notification per added track + batch
+PLAYLIST=0      # --playlist: Expand a playlist URL into individual tracks.
+ASSUME_YES=0    # -y/--yes:   Never prompt; accept scraped/cleaned metadata.
+EDIT_FORCE=0    # --edit:     Always prompt to review (even in playlists).
+FORCE=0         # --force:    Import even if the track is already in the ledger.
+DRYRUN=0        # --dry-run:  Resolve and show metadata; download/import nothing.
+FROM_FILE=""    # --from F:   Read URLs (one per line) from a file, or - for stdin.
+SEARCH=0        # --search N: Treat the arg as a free-text YouTube search (N results).
+SUBCMD=""       # Subcommand verb when present (subscribe, unsubscribe, list, sync, clear-ledger).
+QUIET=0         # --quiet:   Suppress non-error info banners and status lines.
+VERBOSE=0       # --verbose: Surface yt-dlp/ffmpeg stderr.
+NO_COLOR_FLAG=0 # --no-color: Explicitly disable colored output.
+NOTIFY=0        # --notify:  Fire a desktop notification per added track.
 case "${ADDSONG_NOTIFY:-}" in 1|true|yes|on) NOTIFY=1 ;; esac
 
 # Paint yt-dlp's real percent/speed/ETA bar for the download step. On by
 # default; needs a TTY (falls back to the indeterminate spinner without one,
 # or under --quiet/--verbose). Disable with --no-progress or ADDSONG_PROGRESS=0.
-PROGRESS=1      # download bar; --no-progress / ADDSONG_PROGRESS=0 turns it off
+PROGRESS=1      # Download bar; --no-progress / ADDSONG_PROGRESS=0 turns it off.
 case "${ADDSONG_PROGRESS:-}" in 0|false|no|off) PROGRESS=0 ;; esac
 
 # Tallies for the end-of-run summary
@@ -99,17 +94,17 @@ N_ADDED=0
 N_SKIPPED=0
 N_FAILED=0
 
-have_tty=0   # set in main(); declared here so it is defined when sourced
-OS_MODE=""   # ditto (mac / win / wsl / linux / other)
+have_tty=0   # Set in main(); declared here so it is defined when sourced.
+OS_MODE=""   # Same (mac / win / wsl / linux / other).
 
-# --- Colors / verbosity (set up in main once preflight runs) ----------------
+# Colors and verbosity (set up in main() after preflight).
 # Defaults leave all ANSI codes empty so the pure helpers below never emit
-# escape sequences -- tests or pipes see plain text. setup_colors() turns
-# them on only when stdout/stderr are a TTY, NO_COLOR isn't set, and
-# --no-color isn't requested (https://no-color.org/).
+# escape sequences; tests or pipes see plain text. setup_colors() turns
+# them on only when stdout/stderr are a TTY, NO_COLOR is not set, and
+# --no-color is not requested (https://no-color.org/).
 C_ERR=""; C_S_ADDED=""; C_S_SKIPPED=""; C_S_FAILED=""; C_RESET=""
-# Extra accents used by the polished interactive output: a cyan accent (banners,
-# headers, the Edit key), a dim shade (field labels, hints) and a bold prompt.
+# Extra accents for interactive output: a cyan accent (banners, headers, the
+# Edit key), a dim shade (field labels, hints), and a bold prompt.
 C_ACCENT=""; C_DIM=""; C_PROMPT=""; C_BOLD=""
 # Per-field accents for the review card: the Artist and Title labels get their
 # own colors, and the edit hint is shown in blue. Empty until setup_colors().
@@ -122,9 +117,7 @@ I_ADDED=""; I_SKIP=""; I_FAIL=""; I_ERR=""; GLYPH_NOTE=""; PFX_BANNER=""
 # Empty by default so the no-color path falls back to plain block characters.
 C_BAR_FILL=""; C_BAR_TRACK=""
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 err()    { printf '%s%s%s:%s %s\n' "$C_ERR" "$I_ERR" "$PROG" "$C_RESET" "$*" >&2; }
 die()    { err "$*"; exit 1; }
@@ -132,7 +125,7 @@ die()    { err "$*"; exit 1; }
 # banners like "Searching YouTube for:" or "Syncing:".
 say()    { [[ "$QUIET" -eq 1 ]] || printf '%s\n' "$*" >&2; }
 # Aligned one-line result, e.g.  "Added    Artist - Title".
-# Caller passes a known keyword ("Added"/"Skipped"/"Would add"/...) -- we
+# Caller passes a known keyword ("Added"/"Skipped"/"Would add"/...); we
 # color the common ones. Suppressed under --quiet.
 status() {
   [[ "$QUIET" -eq 1 ]] && return 0
@@ -142,7 +135,7 @@ status() {
     Skipped*|Already*|*subscribed*)   kcolor="$C_S_SKIPPED"; icon="$I_SKIP"  ;;
     Failed*)                          kcolor="$C_S_FAILED";  icon="$I_FAIL"  ;;
   esac
-  # When colored, `icon` carries the glyph + a space (and is empty otherwise),
+  # When colored, `icon` carries the glyph plus a space (and is empty otherwise),
   # so the no-color output is byte-for-byte the same aligned line as before.
   printf '  %s%s%-8s%s %s\n' "$kcolor" "$icon" "$keyword" "$C_RESET" "$rest"
 }
@@ -177,21 +170,21 @@ setup_colors() {
   if [[ "$NO_COLOR_FLAG" -eq 1 || -n "${NO_COLOR:-}" || "$have_tty" -eq 0 ]]; then
     return 0
   fi
-  C_ERR=$'\033[1;31m'      # bold red -- "progname:" error prefix
-  C_S_ADDED=$'\033[1;32m'  # bold green
-  C_S_SKIPPED=$'\033[33m'  # yellow
-  C_S_FAILED=$'\033[1;31m' # bold red
+  C_ERR=$'\033[1;31m'      # Bold red; "progname:" error prefix
+  C_S_ADDED=$'\033[1;32m'  # Bold green
+  C_S_SKIPPED=$'\033[33m'  # Yellow
+  C_S_FAILED=$'\033[1;31m' # Bold red
   C_RESET=$'\033[0m'
-  C_ACCENT=$'\033[36m'     # cyan -- banners, the review header, the Edit key
-  C_DIM=$'\033[2m'         # dim -- field labels and inline hints
-  C_PROMPT=$'\033[1;36m'   # bold cyan -- the interactive prompt glyph
-  C_BOLD=$'\033[1m'        # bold -- the song title in the review card
-  C_ARTIST=$'\033[35m'     # magenta -- the "Artist" field label
-  C_TITLE=$'\033[36m'      # cyan -- the "Title" field label
-  C_HINT=$'\033[34m'       # blue -- the "blank keeps the current value" hint
-  C_HEADER=$'\033[1;97m'   # bold bright-white -- the "Review track" card header
-  C_BAR_FILL=$'\033[42m'   # green background -- the growing rectangle
-  C_BAR_TRACK=$'\033[100m' # bright-black (gray) background -- the track behind it
+  C_ACCENT=$'\033[36m'     # Cyan; banners, review header, Edit key
+  C_DIM=$'\033[2m'         # Dim; field labels and inline hints
+  C_PROMPT=$'\033[1;36m'   # Bold cyan; interactive prompt glyph
+  C_BOLD=$'\033[1m'        # Bold; song title in the review card
+  C_ARTIST=$'\033[35m'     # Magenta; "Artist" field label
+  C_TITLE=$'\033[36m'      # Cyan; "Title" field label
+  C_HINT=$'\033[34m'       # Blue; "blank keeps the current value" hint
+  C_HEADER=$'\033[1;97m'   # Bold bright white; "Review track" card header
+  C_BAR_FILL=$'\033[42m'   # Green background; the growing rectangle
+  C_BAR_TRACK=$'\033[100m' # Bright black (gray) background; track behind it
 
   # Result glyphs (trailing space included so the keyword still aligns), the
   # error mark, a music note for the review header, and the banner prefix.
@@ -246,14 +239,14 @@ OPTIONS:
     --no-progress     Use the indeterminate spinner instead of yt-dlp's real
                       download bar (the bar is on by default at a TTY; also
                       via ADDSONG_PROGRESS=0).
-    --format FMT      Output audio format: m4a, mp3, flac, opus, wav, aac
+    --format FMT      Output audio format, one of: $AUDIO_FORMATS
                       (default: m4a; overrides ADDSONG_AUDIO_FORMAT).
     --quality N       Audio quality 0-10, 0=best (default: 0; overrides
                       ADDSONG_AUDIO_QUALITY).
-    --no-color        Disable colored output (also honors NO_COLOR).
     --notify          Fire a desktop notification as each track is imported
                       (also via ADDSONG_NOTIFY=1). No-op if no notifier is
                       installed (terminal-notifier/osascript, notify-send).
+    --no-color        Disable colored output (also honors NO_COLOR).
     -h, --help        Show this help.
     --version         Print the version and exit.
 
@@ -319,14 +312,14 @@ clean_meta() {
 # Make a string safe to use as a filename (no path separators or colons).
 safe_name() {
   local s="$1"
-  s="${s//\//_}"    # forward slash
-  s="${s//:/_}"     # colon
-  s="${s//\\/_}"    # backslash
+  s="${s//\//_}"    # Forward slash
+  s="${s//:/_}"     # Colon
+  s="${s//\\/_}"    # Backslash
   printf '%s' "$s"
 }
 
 # Detect the host platform. Returns one of: mac / win / wsl / linux / other.
-# Pure: reads $OSTYPE and (on Linux) the kernel release for the WSL signature.
+# Pure function: reads $OSTYPE and (on Linux) the kernel release for the WSL signature.
 detect_os() {
   case "${OSTYPE:-}" in
     darwin*)            echo mac ;;
@@ -343,10 +336,10 @@ detect_os() {
   esac
 }
 
-# Default watch folder per OS. On mac this is Apple Music's autoscan folder;
-# on win/wsl it probes the Apple Music preview app then legacy iTunes, falling
-# back to the preview path if neither exists yet (preflight guides the user);
-# on linux/other (no Apple Music app) it returns an output-only folder.
+# Default watch folder per OS. On macOS this is Apple Music's autoscan folder;
+# on Windows/WSL it probes the Apple Music preview app, then legacy iTunes,
+# falling back to the preview path if neither exists yet (preflight guides the
+# user); on Linux/other (no Apple Music app) it returns an output-only folder.
 default_watch_dir() {
   local os d base
   os="${OS_MODE:-$(detect_os)}"
@@ -361,7 +354,7 @@ default_watch_dir() {
         "$base/Music/iTunes/iTunes Media/Automatically Add to iTunes"; do
         [[ -d "$d" ]] && { printf '%s\n' "$d"; return 0; }
       done
-      # Neither found -- return the documented default; preflight guides the
+      # Neither folder found; return the documented default. Preflight guides the
       # user to open the Apple Music preview app once (which creates it).
       printf '%s\n' \
         "$base/Music/Apple Music/Media/Automatically Add to Apple Music"
@@ -373,10 +366,10 @@ default_watch_dir() {
         /mnt/[c-z]/Users/*/Music/iTunes/iTunes\ Media/Automatically\ Add\ to\ iTunes; do
         [[ -d "$d" ]] && { printf '%s\n' "$d"; return 0; }
       done
-      # No Windows Apple Music library reachable -- output-only fallback.
+      # No reachable Windows Apple Music library; output-only fallback.
       printf '%s\n' "${HOME:-/tmp}/Music/addsong" ;;
     *)
-      # linux and any other platform: no Apple Music app, output to a folder.
+      # Linux and other platforms: no Apple Music app; output to a folder.
       printf '%s\n' "${HOME:-/tmp}/Music/addsong" ;;
   esac
 }
@@ -394,7 +387,7 @@ ledger_add() {
 # Forget every imported track: remove the ledger so future runs treat each
 # track as new again (re-downloading/re-importing on the next add or sync).
 # Destructive, so confirm at a TTY unless -y/--yes was given; refuse without a
-# TTY when unconfirmed so a stray `clear-ledger` in a script can't wipe it.
+# TTY when unconfirmed so a stray clear-ledger in a script cannot wipe it.
 ledger_clear() {
   if [[ ! -s "$LEDGER" ]]; then
     printf 'Ledger is already empty (nothing imported yet).\n'
@@ -419,10 +412,10 @@ ledger_clear() {
   status "Cleared" "$n track(s) from the ledger"
 }
 
-# --- Subscriptions ----------------------------------------------------------
-# subscribed.tsv is one URL per line (# comments allowed). 'sync' expands each
-# URL like --playlist does; the importer ledger (above) is what makes a sync
-# "only import new tracks" -- no per-URL last-seen marker is stored here.
+# Subscriptions
+# subscribed.tsv holds one URL per line (# comments allowed). The sync subcommand
+# expands each URL like --playlist; the import ledger (above) deduplicates tracks.
+# No per-URL "last seen" marker is stored here.
 
 # Add a URL to the subscription list (no-op duplicate).
 subs_add() {
@@ -445,7 +438,7 @@ subs_remove() {
   [[ -f "$SUBSCRIPTIONS" ]] || { status "Not subscribed:" "$url"; return 0; }
   local tmp
   tmp="$(mktemp)"
-  # Drop exact-match lines; keep everything else (incl. comments).
+  # Drop exact-match lines; keep everything else (including comments).
   grep -vxF -- "$url" "$SUBSCRIPTIONS" > "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$SUBSCRIPTIONS"
   status "Unsubscribed:" "$url"
@@ -497,7 +490,7 @@ run_ytdlp() {
   local attempt=0 rc
   while :; do
     # Capture yt-dlp's own exit status. (`rc=$?` after an `if` would read the
-    # if-statement's status -- 0 when the condition is false -- not yt-dlp's.)
+    # if-statement's status (0 when the condition is false), not yt-dlp's.)
     rc=0
     yt-dlp "$@" >"$out" 2>"$errf" || rc=$?
     if [[ "$rc" -eq 0 ]]; then
@@ -528,14 +521,14 @@ with_spinner() {
   local -a frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
   "$@" &
   local pid=$! i=0 rc=0
-  # Hide the cursor while spinning; restore it when we're done.
+  # Hide the cursor while spinning; restore it when done.
   printf '\033[?25l' > /dev/tty
   while kill -0 "$pid" 2>/dev/null; do
     printf '\r  %s%s%s %s' "$C_ACCENT" "${frames[i++ % ${#frames[@]}]}" "$C_RESET" "$label" > /dev/tty
     sleep 0.1
   done
   wait "$pid" || rc=$?
-  printf '\r\033[K\033[?25h' > /dev/tty   # clear the line and show the cursor
+  printf '\r\033[K\033[?25h' > /dev/tty   # Clear the line and show the cursor.
   return "$rc"
 }
 
@@ -554,19 +547,19 @@ render_progress() {
   # the whole painted line within one row (and one column shy of the right edge)
   # so the carriage return below redraws it in place. A line as wide as the
   # terminal triggers the auto-margin wrap, and \r would then only rewrite the
-  # last visual row -- leaving the rest stacked as extra lines.
+  # last visual row, leaving the rest stacked as extra lines.
   cols="${COLUMNS:-}"
   [[ "$cols" =~ ^[0-9]+$ ]] \
     || cols="$( { stty size </dev/tty; } 2>/dev/null | awk '{print $2}' )"
   [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
 
-  printf '\033[?25l' > /dev/tty                 # hide cursor while painting
+  printf '\033[?25l' > /dev/tty                 # Hide cursor while painting.
   while IFS= read -r line; do
     [[ "$line" == "[download]"*%* ]] || continue
     body="${line#\[download\]}"
     body="${body#"${body%%[![:space:]]*}"}"     # trim leading whitespace
-    pct="${body%%%*}"                            # the number before the first %
-    ipct="${pct%.*}"                             # integer part drives the bar
+    pct="${body%%%*}"                            # Number before the first %.
+    ipct="${pct%.*}"                             # Integer part drives the bar.
     [[ "$ipct" =~ ^[0-9]+$ ]] || continue
     (( ipct > 100 )) && ipct=100
     eta=""
@@ -623,7 +616,7 @@ render_progress() {
     # above is unaffected); empty codes leave it plain under --no-color.
     printf '\r\033[K  %s%s%s %s %s' "$C_S_ADDED" "$shown" "$C_RESET" "$bar" "$metrics" > /dev/tty
   done
-  printf '\r\033[K\033[?25h' > /dev/tty          # clear the line, restore cursor
+  printf '\r\033[K\033[?25h' > /dev/tty          # Clear the line; restore cursor.
 }
 
 # Interactive review. Reads/writes /dev/tty so it works mid-pipeline.
@@ -662,7 +655,7 @@ review_meta() {
         printf '  %sTitle%s  [%s]: ' "$C_TITLE" "$C_RESET" "$REVIEW_TITLE" > /dev/tty
         read -r x < /dev/tty || x=""
         [[ -n "$x" ]] && REVIEW_TITLE="$x"
-        ;;  # loop to re-show the updated values for confirmation
+        ;;  # Loop to re-show the updated values for confirmation.
       *)
         printf '  %s(Enter = Add, E = Edit, S = Skip)%s\n' "$C_DIM" "$C_RESET" > /dev/tty
         ;;
@@ -670,11 +663,9 @@ review_meta() {
   done
 }
 
-# ---------------------------------------------------------------------------
 # Process a single track URL.
-#   $1 = url, $2 = interactive (1/0)
+#   $1 = URL, $2 = interactive (1/0)
 # Returns: 0 added, 2 skipped (duplicate or user skip), 1 failed.
-# ---------------------------------------------------------------------------
 process_one() {
   local url="$1" interactive="$2"
   local meta id raw_title raw_uploader artist title album year track_no
@@ -709,7 +700,7 @@ process_one() {
   done
 
   if [[ -n "$m_track" && -n "$m_artist" ]]; then
-    # Structured music metadata (e.g. YouTube Music) -- already clean.
+    # Structured music metadata (e.g. YouTube Music); already clean.
     artist="$m_artist"
     title="$m_track"
   else
@@ -724,7 +715,7 @@ process_one() {
     artist="$(printf '%s' "$artist" | clean_meta)"
     title="$(printf '%s'  "$title"  | clean_meta)"
   fi
-  [[ -n "$title" ]] || title="$raw_title"   # never end up with an empty title
+  [[ -n "$title" ]] || title="$raw_title"   # Never end up with an empty title.
 
   album="$m_album"
   year="$m_year"
@@ -781,7 +772,7 @@ process_one() {
     ppid=$!
     run_ytdlp "/dev/fd/9" "$staging/dl.err" --progress --newline "${dlargs[@]}" \
       && dl_rc=0 || dl_rc=$?
-    exec 9>&-                             # close write end so the bar drains/clears
+    exec 9>&-                             # Close write end so the bar drains/clears.
     wait "$ppid" 2>/dev/null || true
   else
     with_spinner "Downloading: $artist - $title" \
@@ -847,21 +838,19 @@ process_one() {
   return 0
 }
 
-# ---------------------------------------------------------------------------
 # Decide whether to review interactively.
 #   --edit forces on; -y forces off; otherwise on for a single track at a TTY.
-# ---------------------------------------------------------------------------
 interactive_for() {
-  # $1 = is this a playlist run? (1/0); reads the global have_tty.
-  if [[ "$DRYRUN" -eq 1 ]]; then echo 0; return; fi      # nothing to confirm
+  # $1 = Is this a playlist run? (1/0); reads the global have_tty.
+  if [[ "$DRYRUN" -eq 1 ]]; then echo 0; return; fi      # Nothing to confirm.
   if [[ "$ASSUME_YES" -eq 1 ]]; then echo 0; return; fi
   if [[ "$EDIT_FORCE" -eq 1 ]]; then echo "$have_tty"; return; fi
-  if [[ "$1" -eq 1 ]]; then echo 0; return; fi   # playlists default to no prompt
+  if [[ "$1" -eq 1 ]]; then echo 0; return; fi   # Playlists default to no prompt.
   echo "$have_tty"
 }
 
 note_imported() {
-  # $1 = how many were added
+  # $1 = How many tracks were added.
   [[ "$DRYRUN" -eq 1 ]] && return 0
   [[ "$1" -gt 0 ]] || return 0
   case "${OS_MODE:-}" in
@@ -877,8 +866,8 @@ note_imported() {
 run_url_stream() {
   local rev="$1" line rc
   while IFS= read -r line; do
-    line="${line#"${line%%[![:space:]]*}"}"   # trim leading whitespace
-    line="${line%"${line##*[![:space:]]}"}"   # trim trailing whitespace
+    line="${line#"${line%%[![:space:]]*}"}"   # Trim leading whitespace.
+    line="${line%"${line##*[![:space:]]}"}"   # Trim trailing whitespace.
     [[ -z "$line" || "$line" == \#* ]] && continue
     process_one "$line" "$rev" && rc=0 || rc=$?
     case "$rc" in
@@ -907,23 +896,20 @@ finish_batch() {
   [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
 }
 
-# ---------------------------------------------------------------------------
-# main: parse arguments, run preflight checks, and process the request.
+# Main: parse arguments, run preflight checks, and process the request.
 # Kept in a function (and gated by the source guard at the bottom) so the file
 # can be `source`d by tests to exercise the functions above without parsing
 # args, running preflight, or downloading anything.
-# ---------------------------------------------------------------------------
 main() {
   local URL="" tool ids rev rc
 
-  # Subcommand peek: a bare first arg of subscribe/unsubscribe/list/sync isn't
+  # Subcommand peek: a bare first arg of subscribe/unsubscribe/list/sync is not
   # a URL or a YouTube search (URLs always start with http(s)://), so intercept
   # it as the verb rather than routing it into the search/URL path below.
   case "${1:-}" in
     subscribe|unsubscribe|list|sync|clear-ledger)
       SUBCMD="$1"; shift
-      # If this is the very first thing and the help/version flags alone were
-      # requested, honour them immediately.
+      # If help or version was requested alone, honor it immediately.
       [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { usage; exit 0; }
       [[ "${1:-}" == "--version" ]] && { printf '%s %s\n' "$PROG" "$VERSION"; exit 0; }
       ;;
@@ -964,7 +950,7 @@ main() {
   done
 
   # Acknowledge subcommands before the URL/search validation below, because
-  # list/sync don't take a <url> argument at all and would otherwise trip the
+  # list/sync do not take a <url> argument and would otherwise trip the
   # "expected a URL" guard.
   if [[ -n "$SUBCMD" ]]; then
     case "$SUBCMD" in
@@ -972,8 +958,8 @@ main() {
       unsubscribe) [[ -n "$URL" ]] || die "unsubscribe needs a URL"; subs_remove "$URL"; exit 0 ;;
       list)        subs_list; exit 0 ;;
       clear-ledger) ledger_clear; exit 0 ;;
-      # sync needs preflight (yt-dlp + watch dir); but short-circuit if there
-      # are no subscriptions so the user doesn't have to install yt-dlp just
+      # sync needs preflight (yt-dlp + watch dir), but short-circuit when there
+      # are no subscriptions so the user does not need yt-dlp installed just
       # to see the friendly "none yet" message.
       sync)
         if [[ ! -s "$SUBSCRIPTIONS" ]]; then
@@ -1019,8 +1005,8 @@ choco install yt-dlp ffmpeg on Windows, or use your distro's package manager).
 See the Setup section in the README."
   done
 
-  # Preflight: watch folder. mac/win/wsl expect an Apple Music app folder to
-  # exist; linux/other run output-only and create the fallback dir themselves.
+  # Preflight: watch folder. macOS/Windows/WSL expect an Apple Music app folder to
+  # exist; Linux/other run output-only and create the fallback dir themselves.
   if [[ ! -d "$WATCH_DIR" ]]; then
     case "$OS_MODE" in
       mac)
@@ -1043,7 +1029,7 @@ creates the folder. From WSL, point ADDSONG_WATCH_DIR at the Windows path,
 e.g. /mnt/c/Users/you/Music/Apple Music/Media/Automatically Add to Apple Music.
 See the Setup section in the README." ;;
       *)
-        # Output-only: macOS Apple Music app doesn't exist here. Ensure the
+        # Output-only: no Apple Music app on this platform. Ensure the
         # fallback folder exists and continue; import is the user's job.
         mkdir -p "$WATCH_DIR" \
           || die "cannot create output folder: $WATCH_DIR"
@@ -1056,18 +1042,18 @@ See the Setup section in the README." ;;
   # Detect a usable controlling terminal by actually opening /dev/tty
   # read-write. The cheaper [[ -e/-r /dev/tty ]] test passes even when there is
   # no controlling terminal (cron, CI, some piped contexts), where opening it
-  # fails with ENXIO -- so probe the open, which is what the spinner and the
+  # fails with ENXIO, so probe the open, which is what the spinner and the
   # interactive prompts really need. The redirection is on a group command (not
   # exec) so a failure just marks no-TTY instead of exiting the shell.
   have_tty=0
   if { true; } 2>/dev/null <>/dev/tty; then have_tty=1; fi
   setup_colors
 
-  # 'sync' was peeked earlier but needs preflight, so it falls through to here.
+  # sync was peeked earlier but needs preflight, so it falls through to here.
   [[ "$SUBCMD" == "sync" ]] && subs_sync
 
   if [[ -n "$FROM_FILE" ]]; then
-    rev="$(interactive_for 1)"   # batch: non-interactive unless --edit
+    rev="$(interactive_for 1)"   # Batch: non-interactive unless --edit.
     if [[ "$FROM_FILE" == "-" ]]; then
       run_url_stream "$rev"
     else
