@@ -17,9 +17,9 @@ sourced() {
 # --- clean_meta -----------------------------------------------------------
 
 @test "clean_meta strips (Official Video)" {
-  sourced "printf '%s' 'Never Gonna Give You Up (Official Video)' | clean_meta"
+  sourced "printf '%s' 'Bohemian Rhapsody (Official Video)' | clean_meta"
   [ "$status" -eq 0 ]
-  [ "$output" = 'Never Gonna Give You Up' ]
+  [ "$output" = 'Bohemian Rhapsody' ]
 }
 
 @test "clean_meta strips [4K] and (Lyrics)" {
@@ -151,9 +151,9 @@ teardown_stubs() {
 
 @test "bare non-URL arg defaults to a 1-result search" {
   setup_stubs
-  run "$ADDSONG" --dry-run "rick astley never gonna give you up"
+  run "$ADDSONG" --dry-run "queen bohemian rhapsody"
   [ "$status" -eq 0 ]
-  grep -q 'Searching YouTube for: rick astley never gonna give you up' <<<"$output"
+  grep -q 'Searching YouTube for: queen bohemian rhapsody' <<<"$output"
   [ "$(printf '%s\n' "$output" | grep -c '^  Would add')" -eq 1 ]
   teardown_stubs
 }
@@ -386,4 +386,43 @@ subs_teardown() {
   [ "$(printf '%s\n' "$output" | grep -c '^Syncing:')" -eq 1 ]
   subs_teardown
   teardown_stubs
+}
+
+# --- clear-ledger --------------------------------------------------------
+#
+# clear-ledger forgets every imported track by removing the dedup ledger.
+# It's destructive, so it confirms at a terminal and refuses without one
+# unless -y is given. These tests need no yt-dlp/ffmpeg (it exits before
+# preflight), only a populated ADDSONG_LEDGER.
+
+@test "clear-ledger -y wipes a populated ledger" {
+  led="$(mktemp)"
+  printf 'VID1\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$led"
+  printf 'VID2\tArtist2\tTitle2\t2024-01-02T00:00:00\n' >> "$led"
+  run env ADDSONG_LEDGER="$led" "$ADDSONG" clear-ledger -y
+  [ "$status" -eq 0 ]
+  grep -q 'Cleared' <<<"$output"
+  [ ! -s "$led" ]   # removed (or empty)
+  rm -f "$led"
+}
+
+@test "clear-ledger reports an already-empty ledger" {
+  led="$(mktemp)"   # exists but empty
+  run env ADDSONG_LEDGER="$led" "$ADDSONG" clear-ledger
+  [ "$status" -eq 0 ]
+  grep -q 'already empty' <<<"$output"
+  rm -f "$led"
+}
+
+@test "clear-ledger refuses without confirmation when there's no terminal" {
+  command -v setsid >/dev/null 2>&1 || skip "setsid not available"
+  led="$(mktemp)"
+  printf 'VID1\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$led"
+  # setsid detaches from the controlling terminal, so opening /dev/tty fails
+  # and the unconfirmed clear must bail out rather than prompt or wipe.
+  run setsid env ADDSONG_LEDGER="$led" "$ADDSONG" clear-ledger </dev/null
+  [ "$status" -ne 0 ]
+  grep -q 'refusing to clear' <<<"$output"
+  [ -s "$led" ]     # left untouched
+  rm -f "$led"
 }

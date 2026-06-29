@@ -90,10 +90,12 @@ addsong "songname"
 `addsong` finds it and shows what it got, so you can catch any mistakes:
 
 ```
-  Artist   Artist Name
-  Title    Song Title
+  Review track ♪
+  Artist: Artist Name
+  Title:  Song Title
 
-  [Enter] add    [e] edit    [s] skip
+  [Enter] Add  ·  [E] Edit  ·  [S] Skip
+  ❯
 ```
 
 Press **Enter** and it lands in Apple Music. That's the whole thing.
@@ -177,6 +179,19 @@ addsong sync                                                      # grab new son
 
 Stop following with `addsong unsubscribe "<link>"`.
 
+#### Start Over
+
+`addsong` remembers what it has already imported so it never adds the same song
+twice. To wipe that memory — so the next add or `sync` treats every song as new
+again — clear the ledger:
+
+```bash
+addsong clear-ledger        # asks you to confirm first
+addsong clear-ledger -y     # skip the confirmation
+```
+
+To re-add just one song you already have, use `--force` instead.
+
 ### All The Options
 
 The ones you'll reach for most:
@@ -195,10 +210,12 @@ And a few for when you need them:
 | ------------ | ---------------------------------------------- |
 | `--force`    | Add a song again even if you already have it.  |
 | `--dry-run`  | Preview what would happen — downloads nothing. |
+| `--no-progress` | Use the spinner instead of the download bar. |
 | `--verbose`  | Show the full error when something breaks.     |
 | `--quiet`    | Show only errors, nothing else.                |
 | `--no-color` | Turn off colored text.                         |
 | `--help`     | List every command and option.                 |
+| `--version`  | Print the installed version and exit.          |
 
 Want to set something permanently? A few defaults live in environment variables —
 the main one is `ADDSONG_WATCH_DIR` (where songs are saved). Run `addsong --help`

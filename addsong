@@ -5,7 +5,7 @@
 # Linux (no Apple Music app there).
 #
 #   addsong "https://www.youtube.com/watch?v=..."          single track (URL)
-#   addsong "rick astley never gonna give you up"           top YouTube result
+#   addsong "queen bohemian rhapsody"                       top YouTube result
 #   addsong --search 3 "80s disco mix"                      top 3 results
 #   addsong --playlist "https://www.youtube.com/playlist?list=..."
 #   addsong subscribe "https://www.youtube.com/playlist?list=..."
@@ -73,10 +73,16 @@ FORCE=0         # --force:    import even if the track is already in the ledger
 DRYRUN=0        # --dry-run:  resolve and show metadata; download/import nothing
 FROM_FILE=""    # --from F:   read URLs (one per line) from a file, or - for stdin
 SEARCH=0        # --search N: treat the arg as a free-text YouTube search (N results)
-SUBCMD=""       # the keyword verb (subscribe/unsubscribe/list/sync/help) when present
+SUBCMD=""       # the keyword verb (subscribe/unsubscribe/list/sync/clear-ledger) when present
 QUIET=0         # --quiet:   suppress non-error info banners and status lines
 VERBOSE=0       # --verbose: surface yt-dlp/ffmpeg stderr
 NO_COLOR_FLAG=0 # --no-color: explicitly disable colored output
+
+# Paint yt-dlp's real percent/speed/ETA bar for the download step. On by
+# default; needs a TTY (falls back to the indeterminate spinner without one,
+# or under --quiet/--verbose). Disable with --no-progress or ADDSONG_PROGRESS=0.
+PROGRESS=1      # download bar; --no-progress / ADDSONG_PROGRESS=0 turns it off
+case "${ADDSONG_PROGRESS:-}" in 0|false|no|off) PROGRESS=0 ;; esac
 
 # Tallies for the end-of-run summary
 N_ADDED=0
@@ -92,12 +98,25 @@ OS_MODE=""   # ditto (mac / win / wsl / linux / other)
 # them on only when stdout/stderr are a TTY, NO_COLOR isn't set, and
 # --no-color isn't requested (https://no-color.org/).
 C_ERR=""; C_S_ADDED=""; C_S_SKIPPED=""; C_S_FAILED=""; C_RESET=""
+# Extra accents used by the polished interactive output: a cyan accent (banners,
+# headers, the Edit key), a dim shade (field labels, hints) and a bold prompt.
+C_ACCENT=""; C_DIM=""; C_PROMPT=""; C_BOLD=""
+# Per-field accents for the review card: the Artist and Title labels get their
+# own colors, and the edit hint is shown in blue. Empty until setup_colors().
+C_ARTIST=""; C_TITLE=""; C_HINT=""; C_HEADER=""
+# Status/error glyphs and the banner prefix. All empty by default so the
+# no-color / non-TTY / piped paths emit exactly the same plain text as before;
+# setup_colors() fills them in only when colored output is enabled.
+I_ADDED=""; I_SKIP=""; I_FAIL=""; I_ERR=""; GLYPH_NOTE=""; PFX_BANNER=""
+# Progress-bar colors: a green fill (the growing rectangle) over a gray track.
+# Empty by default so the no-color path falls back to plain block characters.
+C_BAR_FILL=""; C_BAR_TRACK=""
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-err()    { printf '%s%s:%s %s\n' "$C_ERR" "$PROG" "$C_RESET" "$*" >&2; }
+err()    { printf '%s%s%s:%s %s\n' "$C_ERR" "$I_ERR" "$PROG" "$C_RESET" "$*" >&2; }
 die()    { err "$*"; exit 1; }
 # Non-error info line (also to stderr); suppressed by --quiet. Used for
 # banners like "Searching YouTube for:" or "Syncing:".
@@ -107,13 +126,15 @@ say()    { [[ "$QUIET" -eq 1 ]] || printf '%s\n' "$*" >&2; }
 # color the common ones. Suppressed under --quiet.
 status() {
   [[ "$QUIET" -eq 1 ]] && return 0
-  local keyword="$1" rest="$2" kcolor=""
+  local keyword="$1" rest="$2" kcolor="" icon=""
   case "$keyword" in
-    Added*|"Would add"*)           kcolor="$C_S_ADDED"   ;;
-    Skipped*|Already*|*subscribed*) kcolor="$C_S_SKIPPED" ;;
-    Failed*)                       kcolor="$C_S_FAILED"  ;;
+    Added*|"Would add"*|Subscribed:*) kcolor="$C_S_ADDED";   icon="$I_ADDED" ;;
+    Skipped*|Already*|*subscribed*)   kcolor="$C_S_SKIPPED"; icon="$I_SKIP"  ;;
+    Failed*)                          kcolor="$C_S_FAILED";  icon="$I_FAIL"  ;;
   esac
-  printf '  %s%-8s%s %s\n' "$kcolor" "$keyword" "$C_RESET" "$rest"
+  # When colored, `icon` carries the glyph + a space (and is empty otherwise),
+  # so the no-color output is byte-for-byte the same aligned line as before.
+  printf '  %s%s%-8s%s %s\n' "$kcolor" "$icon" "$keyword" "$C_RESET" "$rest"
 }
 
 # Decide whether to colorize. Honors --no-color, NO_COLOR env, and non-TTY.
@@ -122,10 +143,29 @@ setup_colors() {
     return 0
   fi
   C_ERR=$'\033[1;31m'      # bold red -- "progname:" error prefix
-  C_S_ADDED=$'\033[32m'    # green
+  C_S_ADDED=$'\033[1;32m'  # bold green
   C_S_SKIPPED=$'\033[33m'  # yellow
-  C_S_FAILED=$'\033[31m'   # red
+  C_S_FAILED=$'\033[1;31m' # bold red
   C_RESET=$'\033[0m'
+  C_ACCENT=$'\033[36m'     # cyan -- banners, the review header, the Edit key
+  C_DIM=$'\033[2m'         # dim -- field labels and inline hints
+  C_PROMPT=$'\033[1;36m'   # bold cyan -- the interactive prompt glyph
+  C_BOLD=$'\033[1m'        # bold -- the song title in the review card
+  C_ARTIST=$'\033[35m'     # magenta -- the "Artist" field label
+  C_TITLE=$'\033[36m'      # cyan -- the "Title" field label
+  C_HINT=$'\033[34m'       # blue -- the "blank keeps the current value" hint
+  C_HEADER=$'\033[1;97m'   # bold bright-white -- the "Review track" card header
+  C_BAR_FILL=$'\033[42m'   # green background -- the growing rectangle
+  C_BAR_TRACK=$'\033[100m' # bright-black (gray) background -- the track behind it
+
+  # Result glyphs (trailing space included so the keyword still aligns), the
+  # error mark, a music note for the review header, and the banner prefix.
+  I_ADDED='✓ '
+  I_SKIP='• '
+  I_FAIL='✗ '
+  I_ERR='✗ '
+  GLYPH_NOTE='♪'
+  PFX_BANNER="${C_ACCENT}»${C_RESET} "
 }
 
 usage() {
@@ -138,6 +178,7 @@ USAGE:
     $PROG unsubscribe <playlist-url>    drop a subscription
     $PROG list                          show subscribed playlists
     $PROG sync [options]                import new tracks from every subscription
+    $PROG clear-ledger [-y]             forget every imported track (reset dedup)
     $PROG --help
 
 SUBCOMMANDS:
@@ -149,6 +190,10 @@ SUBCOMMANDS:
                       running it daily keeps your library in step with a
                       YouTube playlist for free). Composes with --force,
                       --dry-run, --edit, -y.
+    clear-ledger       Forget every imported track by clearing the dedup
+                      ledger, so future adds/syncs treat each track as new
+                      again. Prompts to confirm at a terminal; pass -y to skip
+                      the prompt (required when there's no terminal).
 
 OPTIONS:
     --playlist        Treat the URL as a playlist and import every track.
@@ -163,6 +208,9 @@ OPTIONS:
     --quiet           Suppress info banners and per-track status lines
                       (errors are still printed).
     --verbose         Surface yt-dlp/ffmpeg stderr for troubleshooting.
+    --no-progress     Use the indeterminate spinner instead of yt-dlp's real
+                      download bar (the bar is on by default at a TTY; also
+                      via ADDSONG_PROGRESS=0).
     --no-color        Disable colored output (also honors NO_COLOR).
     -h, --help        Show this help.
     --version         Print the version and exit.
@@ -172,7 +220,7 @@ ARGUMENTS:
                       --search / by default -- a free-text search query.
                       Examples:
                         addsong "https://www.youtube.com/watch?v=..."
-                        addsong "rick astley never gonna give you up"
+                        addsong "queen bohemian rhapsody"
                         addsong --search 3 "80s disco mix"
 
 INTERACTIVE REVIEW:
@@ -189,12 +237,14 @@ ENVIRONMENT:
                             (default: ~/.local/state/addsong/subscribed.tsv).
     ADDSONG_RETRIES         Extra attempts on transient failures (default: 2).
     ADDSONG_RETRY_DELAY     Base backoff seconds between attempts (default: 3).
+    ADDSONG_PROGRESS        Set to 0 to disable the real download bar and use
+                            the spinner (same as --no-progress).
     ADDSONG_CONFIG          Config file of KEY=VALUE defaults
                             (default: ~/.config/addsong/config).
 
 EXAMPLES:
-    $PROG "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    $PROG "rick astley never gonna give you up"
+    $PROG "https://www.youtube.com/watch?v=..."
+    $PROG "queen bohemian rhapsody"
     $PROG --search 3 "80s disco mix"
     $PROG --playlist "https://www.youtube.com/playlist?list=PL..."
     $PROG subscribe "https://www.youtube.com/playlist?list=PL..."
@@ -296,6 +346,34 @@ ledger_add() {
   printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$(date +%FT%T)" >> "$LEDGER"
 }
 
+# Forget every imported track: remove the ledger so future runs treat each
+# track as new again (re-downloading/re-importing on the next add or sync).
+# Destructive, so confirm at a TTY unless -y/--yes was given; refuse without a
+# TTY when unconfirmed so a stray `clear-ledger` in a script can't wipe it.
+ledger_clear() {
+  if [[ ! -s "$LEDGER" ]]; then
+    printf 'Ledger is already empty (nothing imported yet).\n'
+    return 0
+  fi
+  local n ans
+  n="$(grep -c '' "$LEDGER" 2>/dev/null || echo 0)"
+  if [[ "$ASSUME_YES" -ne 1 ]]; then
+    if { true; } 2>/dev/null <>/dev/tty; then
+      printf 'Clear %s imported track(s) from the ledger? Future runs may re-import them. [y/N] ' \
+        "$n" > /dev/tty
+      read -r ans < /dev/tty || ans=""
+      case "$ans" in
+        y|Y|yes|YES) ;;
+        *) printf 'Cancelled. Ledger left untouched.\n'; return 0 ;;
+      esac
+    else
+      die "refusing to clear the ledger without confirmation (re-run with -y to confirm)"
+    fi
+  fi
+  rm -f "$LEDGER"
+  status "Cleared" "$n track(s) from the ledger"
+}
+
 # --- Subscriptions ----------------------------------------------------------
 # subscribed.tsv is one URL per line (# comments allowed). 'sync' expands each
 # URL like --playlist does; the importer ledger (above) is what makes a sync
@@ -352,7 +430,7 @@ subs_sync() {
   while IFS= read -r url; do
     [[ -z "$url" || "$url" == \#* ]] && continue
     say ""
-    say "Syncing: $url"
+    say "${PFX_BANNER}Syncing: $url"
     ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$url" 2>/dev/null)" \
       || { err "could not read playlist: $url"; N_FAILED=$((N_FAILED+1)); continue; }
     if [[ -z "$ids" ]]; then
@@ -405,12 +483,99 @@ with_spinner() {
   # Hide the cursor while spinning; restore it when we're done.
   printf '\033[?25l' > /dev/tty
   while kill -0 "$pid" 2>/dev/null; do
-    printf '\r  %s %s' "${frames[i++ % ${#frames[@]}]}" "$label" > /dev/tty
+    printf '\r  %s%s%s %s' "$C_ACCENT" "${frames[i++ % ${#frames[@]}]}" "$C_RESET" "$label" > /dev/tty
     sleep 0.1
   done
   wait "$pid" || rc=$?
   printf '\r\033[K\033[?25h' > /dev/tty   # clear the line and show the cursor
   return "$rc"
+}
+
+# Read yt-dlp's --newline progress on stdin and paint an in-place
+# percent/speed/ETA bar on /dev/tty for one track. Lines that aren't a
+# "[download] ...%" progress update are ignored; the line is cleared when the
+# stream closes. Used only in progress mode (a TTY, not --quiet/--verbose; see
+# process_one), wired through a process substitution so run_ytdlp's retry +
+# stderr-capture wrapper stays untouched.
+#   $1 = label shown next to the bar.
+render_progress() {
+  local label="$1" line body pct ipct eta speed bar metrics i width=24 filled
+  local cols avail shown
+
+  # Terminal width: prefer COLUMNS, else ask the tty, else assume 80. We keep
+  # the whole painted line within one row (and one column shy of the right edge)
+  # so the carriage return below redraws it in place. A line as wide as the
+  # terminal triggers the auto-margin wrap, and \r would then only rewrite the
+  # last visual row -- leaving the rest stacked as extra lines.
+  cols="${COLUMNS:-}"
+  [[ "$cols" =~ ^[0-9]+$ ]] \
+    || cols="$( { stty size </dev/tty; } 2>/dev/null | awk '{print $2}' )"
+  [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+
+  printf '\033[?25l' > /dev/tty                 # hide cursor while painting
+  while IFS= read -r line; do
+    [[ "$line" == "[download]"*%* ]] || continue
+    body="${line#\[download\]}"
+    body="${body#"${body%%[![:space:]]*}"}"     # trim leading whitespace
+    pct="${body%%%*}"                            # the number before the first %
+    ipct="${pct%.*}"                             # integer part drives the bar
+    [[ "$ipct" =~ ^[0-9]+$ ]] || continue
+    (( ipct > 100 )) && ipct=100
+    eta=""
+    [[ "$line" == *" ETA "* ]] && eta="${line##* ETA }"
+    speed=""
+    if [[ "$line" == *" at "* ]]; then
+      speed="${line#* at }"
+      speed="${speed%%/s*}"
+      speed="${speed#"${speed%%[![:space:]]*}"}/s"
+    fi
+
+    # Right-hand stats as one plain string (drives both width math and output).
+    printf -v metrics '%5s%%' "$pct"
+    [[ -n "$speed" ]] && metrics+="  $speed"
+    [[ -n "$eta"   ]] && metrics+="  ETA $eta"
+
+    # On a narrow terminal even the bar + metrics can overflow, so shrink the
+    # bar to whatever space is left after the fixed parts (2 indent + 2 spaces +
+    # metrics + 1 right margin), keeping at least one cell.
+    width=24
+    local maxbar=$(( cols - 2 - 1 - 1 - ${#metrics} - 1 ))
+    (( maxbar < 1 )) && maxbar=1
+    (( width > maxbar )) && width=$maxbar
+
+    # Trim the label so "  <label> <bar> <metrics>" fits one row with a spare
+    # column on the right (2 indent + label + 1 space + bar(width) + 1 space +
+    # metrics + 1 margin). The bar's color codes are zero-width, so only its
+    # `width` cells count.
+    avail=$(( cols - 2 - 1 - width - 1 - ${#metrics} - 1 ))
+    (( avail < 0 )) && avail=0
+    shown="$label"
+    if (( ${#shown} > avail )); then
+      (( avail >= 1 )) && shown="${label:0:avail-1}…" || shown=""
+    fi
+
+    filled=$(( ipct * width / 100 ))
+    if [[ -n "$C_BAR_FILL" ]]; then
+      # Solid two-tone rectangle: green-filled cells over a gray track. Spaces
+      # painted with background colors render as one chunky growing bar.
+      local fillstr emptystr
+      printf -v fillstr  '%*s' "$filled"            ''
+      printf -v emptystr '%*s' "$(( width - filled ))" ''
+      bar="${C_BAR_FILL}${fillstr}${C_BAR_TRACK}${emptystr}${C_RESET}"
+    else
+      # No color (NO_COLOR / --no-color): fall back to plain block characters.
+      bar=""
+      for ((i = 0; i < width; i++)); do
+        (( i < filled )) && bar+="█" || bar+="░"
+      done
+    fi
+
+    # Carriage return + clear-to-end-of-line repaints this single row in place.
+    # The label is painted green (color codes are zero-width, so the width math
+    # above is unaffected); empty codes leave it plain under --no-color.
+    printf '\r\033[K  %s%s%s %s %s' "$C_S_ADDED" "$shown" "$C_RESET" "$bar" "$metrics" > /dev/tty
+  done
+  printf '\r\033[K\033[?25h' > /dev/tty          # clear the line, restore cursor
 }
 
 # Interactive review. Reads/writes /dev/tty so it works mid-pipeline.
@@ -423,28 +588,35 @@ review_meta() {
   while :; do
     {
       printf '\n'
-      printf '  Artist   %s\n' "$REVIEW_ARTIST"
-      printf '  Title    %s\n' "$REVIEW_TITLE"
+      printf '  %sReview track %s%s\n' "$C_HEADER" "$GLYPH_NOTE" "$C_RESET"
+      printf '  %s%-8s%s%s\n' "$C_ARTIST" 'Artist:' "$C_RESET" "$REVIEW_ARTIST"
+      printf '  %s%-8s%s%s%s%s\n' "$C_TITLE" 'Title:'  "$C_RESET" "$C_BOLD" "$REVIEW_TITLE" "$C_RESET"
       printf '\n'
-      printf '  [Enter] add    [e] edit    [s] skip\n'
-      printf '  > '
+      printf '  %s[Enter]%s Add  %s·%s  %s[E]%s Edit  %s·%s  %s[S]%s Skip\n' \
+        "$C_S_ADDED" "$C_RESET" "$C_DIM" "$C_RESET" \
+        "$C_ACCENT"  "$C_RESET" "$C_DIM" "$C_RESET" \
+        "$C_S_SKIPPED" "$C_RESET"
+      printf '  %s❯%s ' "$C_PROMPT" "$C_RESET"
     } > /dev/tty
     read -r ans < /dev/tty || ans=""
 
+    # On Enter/skip the terminal has echoed a newline, leaving the "> " prompt
+    # lingering on the row above. Step back up and clear it so the result line
+    # follows cleanly.
     case "$ans" in
-      ""|y|Y) return 0 ;;
-      s|S)    return 1 ;;
+      ""|y|Y) printf '\033[A\033[2K\r' > /dev/tty; return 0 ;;
+      s|S)    printf '\033[A\033[2K\r' > /dev/tty; return 1 ;;
       e|E)
-        printf '\n  Edit (blank keeps the current value)\n' > /dev/tty
-        printf '  Artist [%s]: ' "$REVIEW_ARTIST" > /dev/tty
+        printf '\n  %sEdit (blank keeps the current value)%s\n' "$C_HINT" "$C_RESET" > /dev/tty
+        printf '  %sArtist%s [%s]: ' "$C_ARTIST" "$C_RESET" "$REVIEW_ARTIST" > /dev/tty
         read -r x < /dev/tty || x=""
         [[ -n "$x" ]] && REVIEW_ARTIST="$x"
-        printf '  Title  [%s]: ' "$REVIEW_TITLE" > /dev/tty
+        printf '  %sTitle%s  [%s]: ' "$C_TITLE" "$C_RESET" "$REVIEW_TITLE" > /dev/tty
         read -r x < /dev/tty || x=""
         [[ -n "$x" ]] && REVIEW_TITLE="$x"
         ;;  # loop to re-show the updated values for confirmation
       *)
-        printf '  (Enter = add, e = edit, s = skip)\n' > /dev/tty
+        printf '  %s(Enter = Add, E = Edit, S = Skip)%s\n' "$C_DIM" "$C_RESET" > /dev/tty
         ;;
     esac
   done
@@ -535,17 +707,39 @@ process_one() {
     return 0
   fi
 
-  # Download audio and artwork into a temp staging dir.
-  local staging staged final
+  # Download audio and artwork into a temp staging dir. In progress mode (see
+  # PROGRESS) we paint yt-dlp's real percent/speed/ETA bar; otherwise the
+  # indeterminate spinner. Both share one yt-dlp argument list.
+  local staging staged final dl_rc
   staging="$(mktemp -d "${TMPDIR:-/tmp}/addsong.XXXXXX")"
 
-  if ! with_spinner "Downloading  $artist - $title" \
-        run_ytdlp /dev/null "$staging/dl.err" \
-        --no-playlist --retries 3 --fragment-retries 3 --socket-timeout 30 \
-        --extract-audio --audio-format "$AUDIO_FORMAT" --audio-quality 0 \
-        --embed-thumbnail --convert-thumbnails jpg \
-        -o "$staging/%(id)s.%(ext)s" \
-        -- "$url"; then
+  local -a dlargs=(
+    --no-playlist --retries 3 --fragment-retries 3 --socket-timeout 30
+    --extract-audio --audio-format "$AUDIO_FORMAT" --audio-quality 0
+    --embed-thumbnail --convert-thumbnails jpg
+    -o "$staging/%(id)s.%(ext)s"
+    -- "$url"
+  )
+
+  if [[ "$PROGRESS" -eq 1 && "$have_tty" -eq 1 && "$QUIET" -ne 1 && "$VERBOSE" -ne 1 ]]; then
+    # --newline makes yt-dlp emit one progress line per update on stdout; route
+    # that stdout into render_progress through a process substitution. The fd is
+    # opened once here and survives run_ytdlp's retries (each attempt just dups
+    # it), so the wrapper's retry + stderr-capture path is untouched.
+    local pfd ppid
+    exec {pfd}> >(render_progress "Downloading: $artist - $title")
+    ppid=$!
+    run_ytdlp "/dev/fd/$pfd" "$staging/dl.err" --progress --newline "${dlargs[@]}" \
+      && dl_rc=0 || dl_rc=$?
+    exec {pfd}>&-                         # close write end so the bar drains/clears
+    wait "$ppid" 2>/dev/null || true
+  else
+    with_spinner "Downloading: $artist - $title" \
+      run_ytdlp /dev/null "$staging/dl.err" "${dlargs[@]}" \
+      && dl_rc=0 || dl_rc=$?
+  fi
+
+  if [[ "$dl_rc" -ne 0 ]]; then
     err "download failed: $artist - $title ($(grep -i 'error' "$staging/dl.err" | tail -n1))"
     rm -rf "$staging"
     return 1
@@ -623,10 +817,6 @@ note_imported() {
     mac|win|wsl)
       say ""
       say "Apple Music will import shortly. Make sure the Music app is open." ;;
-    *)
-      say ""
-      say "Saved $1 track(s) to: $WATCH_DIR"
-      say "No Apple Music app on ${OS_MODE:-this platform} -- import them into your library of choice." ;;
   esac
 }
 
@@ -652,8 +842,16 @@ run_url_stream() {
 finish_batch() {
   local verb="Added"
   [[ "$DRYRUN" -eq 1 ]] && verb="Would add"
+  # A clean failure count stays dim; once something fails it turns red. With
+  # colors off every code is empty, so the line is the same plain summary.
+  local fcolor="$C_DIM"
+  [[ "$N_FAILED" -gt 0 ]] && fcolor="$C_S_FAILED"
   say ""
-  say "Done. $verb $N_ADDED, skipped $N_SKIPPED, failed $N_FAILED."
+  say "$(printf 'Done. %s %s%s%s, skipped %s%s%s, failed %s%s%s.' \
+    "$verb" \
+    "$C_S_ADDED"   "$N_ADDED"   "$C_RESET" \
+    "$C_S_SKIPPED" "$N_SKIPPED" "$C_RESET" \
+    "$fcolor"      "$N_FAILED"  "$C_RESET")"
   note_imported "$N_ADDED"
   [[ "$N_FAILED" -gt 0 ]] && exit 1 || exit 0
 }
@@ -671,7 +869,7 @@ main() {
   # a URL or a YouTube search (URLs always start with http(s)://), so intercept
   # it as the verb rather than routing it into the search/URL path below.
   case "${1:-}" in
-    subscribe|unsubscribe|list|sync)
+    subscribe|unsubscribe|list|sync|clear-ledger)
       SUBCMD="$1"; shift
       # If this is the very first thing and the help/version flags alone were
       # requested, honour them immediately.
@@ -692,6 +890,7 @@ main() {
       --quiet)     QUIET=1 ;;
       --verbose)   VERBOSE=1 ;;
       --no-color)  NO_COLOR_FLAG=1 ;;
+      --no-progress) PROGRESS=0 ;;
       --search)    SEARCH="${2:-}"; [[ -n "$SEARCH" ]] || die "--search needs a number (e.g. --search 3)"
                    [[ "$SEARCH" =~ ^[1-9][0-9]*$ ]] || die "--search needs a positive integer (got: '$SEARCH')"
                    (( SEARCH <= 50 )) || die "--search is capped at 50 (use a playlist URL for more)"
@@ -712,6 +911,7 @@ main() {
       subscribe)   [[ -n "$URL" ]] || die "subscribe needs a URL"; subs_add    "$URL"; exit 0 ;;
       unsubscribe) [[ -n "$URL" ]] || die "unsubscribe needs a URL"; subs_remove "$URL"; exit 0 ;;
       list)        subs_list; exit 0 ;;
+      clear-ledger) ledger_clear; exit 0 ;;
       # sync needs preflight (yt-dlp + watch dir); but short-circuit if there
       # are no subscriptions so the user doesn't have to install yt-dlp just
       # to see the friendly "none yet" message.
@@ -736,7 +936,7 @@ main() {
       [[ -z "$URL" ]] && die "--playlist needs a URL"
       [[ "$URL" != http://* && "$URL" != https://* ]] && die "--playlist needs a URL (got: '$URL')"
     elif [[ "$SEARCH" -gt 0 ]]; then
-      [[ -z "$URL" ]] && die "--search needs a query (try: $PROG --search 3 \"rick astley never gonna give you up\")"
+      [[ -z "$URL" ]] && die "--search needs a query (try: $PROG --search 3 \"80s disco mix\")"
       [[ "$URL" == http://* || "$URL" == https://* ]] && die "--search and a URL are mutually exclusive"
     elif [[ -z "$URL" ]]; then
       usage >&2; exit 1
@@ -787,7 +987,7 @@ See the Setup section in the README." ;;
         # fallback folder exists and continue; import is the user's job.
         mkdir -p "$WATCH_DIR" \
           || die "cannot create output folder: $WATCH_DIR"
-        say "note: no Apple Music app on $OS_MODE; output folder is:"
+        say "note: output folder is:"
         say "      $WATCH_DIR"
         say "      import files into your library of choice manually." ;;
     esac
@@ -816,7 +1016,7 @@ See the Setup section in the README." ;;
     fi
     finish_batch
   elif [[ "$PLAYLIST" -eq 1 ]]; then
-    say "Reading playlist..."
+    say "${PFX_BANNER}Reading playlist..."
     ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "$URL" 2>/dev/null)" \
       || die "could not read playlist: $URL"
     [[ -n "$ids" ]] || die "no tracks found in playlist: $URL"
@@ -826,7 +1026,7 @@ See the Setup section in the README." ;;
       <<< "$(printf '%s\n' "$ids" | sed '/^$/d; s#^#https://www.youtube.com/watch?v=#')"
     finish_batch
   elif [[ "$SEARCH" -gt 0 ]]; then
-    say "Searching YouTube for: $URL"
+    say "${PFX_BANNER}Searching YouTube for: $URL"
     ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "ytsearch${SEARCH}:${URL}" 2>/dev/null)" \
       || die "search failed: $URL"
     [[ -n "$ids" ]] || die "no search results for: $URL"

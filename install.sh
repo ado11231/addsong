@@ -123,4 +123,4 @@ fi
 
 # --- verify ----------------------------------------------------------------
 ok "Installed: $("$BIN_DIR/addsong" --version 2>/dev/null || echo addsong)"
-info "Done. Try:  addsong \"rick astley never gonna give you up\""
+info "Done. Try:  addsong \"songname\""

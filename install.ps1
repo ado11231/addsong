@@ -101,4 +101,4 @@ try {
 } catch {
   Ok 'Installed addsong.'
 }
-Info 'Done. Open a new terminal, then try:  addsong "rick astley never gonna give you up"'
+Info 'Done. Open a new terminal, then try:  addsong "songname"'
