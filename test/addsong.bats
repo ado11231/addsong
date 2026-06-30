@@ -129,18 +129,29 @@ for a in "$@"; do
     exit 0
   fi
 done
-extract=0; out=""; fmt="m4a"
+extract=0; out=""; fmt="m4a"; metafile=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --extract-audio) extract=1 ;;
-    --audio-format)  fmt="$2"; shift ;;
-    -o)              out="$2"; shift ;;
+    --extract-audio)  extract=1 ;;
+    --audio-format)   fmt="$2"; shift ;;
+    -o)               out="$2"; shift ;;
+    --print-to-file)  metafile="$3"; shift 2 ;;   # flag TEMPLATE FILE
   esac
   shift
 done
 if [[ "$extract" -eq 1 ]]; then
   [[ "${STUB_DL_FAIL:-0}" == 1 ]] && { echo 'ERROR: unable to download video data' >&2; exit 1; }
   printf 'audio' > "$(dirname "$out")/VID000.$fmt"
+  # Fast path: the combined download+metadata call captures fields via
+  # --print-to-file. Emulate that by appending the canned metadata block.
+  [[ -n "$metafile" ]] && printf '%s\n' "${STUB_META:-VID000
+Test Title
+Test Uploader
+NA
+NA
+NA
+NA
+NA}" >> "$metafile"
   exit 0
 fi
 [[ "${STUB_META_FAIL:-0}" == 1 ]] && { echo 'ERROR: Private video' >&2; exit 1; }
@@ -192,6 +203,15 @@ teardown_stubs() {
   run "$ADDSONG" --dry-run "queen bohemian rhapsody"
   [ "$status" -eq 0 ]
   grep -q 'Searching YouTube for: queen bohemian rhapsody' <<<"$output"
+  [ "$(printf '%s\n' "$output" | grep -c '^  Would add')" -eq 1 ]
+  teardown_stubs
+}
+
+@test "unquoted multi-word query is joined, not truncated to the last word" {
+  setup_stubs
+  run "$ADDSONG" --dry-run stronger by kanye west
+  [ "$status" -eq 0 ]
+  grep -q 'Searching YouTube for: stronger by kanye west' <<<"$output"
   [ "$(printf '%s\n' "$output" | grep -c '^  Would add')" -eq 1 ]
   teardown_stubs
 }
@@ -285,11 +305,28 @@ run_process_one() {
   teardown_stubs
 }
 
-@test "process_one: failed -> metadata read error returns 1" {
+@test "slow path: metadata read error is reported (dry-run)" {
   setup_stubs
-  run_process_one "export STUB_META_FAIL=1"
-  grep -q 'RC=1' <<<"$output"
+  export STUB_META_FAIL=1
+  run "$ADDSONG" --dry-run --results 1 "x"
+  [ "$status" -ne 0 ]
   grep -q 'could not read info' <<<"$output"
+  teardown_stubs
+}
+
+@test "known id in URL is skipped with no download (zero-network dedup)" {
+  setup_stubs
+  # An 11-char id parseable straight from the URL, already in the ledger.
+  printf 'dQw4w9WgXcQ\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$ADDSONG_LEDGER"
+  run bash -c "
+    export ADDSONG_RETRIES=0 ADDSONG_RETRY_DELAY=0
+    source '$ADDSONG'
+    WATCH_DIR='$WATCH'
+    process_one 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' 0 && r=0 || r=\$?
+    echo \"RC=\$r\""
+  grep -q 'RC=2' <<<"$output"
+  grep -q 'already imported' <<<"$output"
+  [ -z "$(ls -A "$WATCH")" ]
   teardown_stubs
 }
 
@@ -366,10 +403,10 @@ STUB
 
 @test "--quiet still prints errors" {
   setup_stubs
-  export STUB_META_FAIL=1
+  export STUB_DL_FAIL=1
   run "$ADDSONG" --quiet -y --no-progress "https://www.youtube.com/watch?v=z"
   [ "$status" -ne 0 ]
-  grep -q 'could not read info' <<<"$output"
+  grep -q 'download failed' <<<"$output"
   teardown_stubs
 }
 
