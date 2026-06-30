@@ -96,7 +96,7 @@ sourced() {
   [ "$output" = 'wav' ]
 }
 
-# --- --search argument parsing -------------------------------------------
+# --- --results argument parsing -------------------------------------------
 #
 # main() is gated by the source guard, so to exercise arg parsing we run the
 # script directly in a subshell with stubs on PATH (no yt-dlp/ffmpeg network).
@@ -178,9 +178,9 @@ teardown_stubs() {
   rm -f "$ADDSONG_LEDGER"
 }
 
-@test "--search 2 expands to 2 tracks (dry-run)" {
+@test "--results 2 expands to 2 tracks (dry-run)" {
   setup_stubs
-  run "$ADDSONG" --dry-run --search 2 "80s mix"
+  run "$ADDSONG" --dry-run --results 2 "80s mix"
   [ "$status" -eq 0 ]
   # Per-track lines are indented ("  Would add ..."); the summary line is not.
   [ "$(printf '%s\n' "$output" | grep -c '^  Would add')" -eq 2 ]
@@ -196,40 +196,40 @@ teardown_stubs() {
   teardown_stubs
 }
 
-@test "--search rejects 0" {
-  run "$ADDSONG" --search 0 "x"
+@test "--results rejects 0" {
+  run "$ADDSONG" --results 0 "x"
   [ "$status" -ne 0 ]
   grep -q 'positive integer' <<<"$output"
 }
 
-@test "--search rejects non-integers" {
-  run "$ADDSONG" --search abc "x"
+@test "--results rejects non-integers" {
+  run "$ADDSONG" --results abc "x"
   [ "$status" -ne 0 ]
   grep -q 'positive integer' <<<"$output"
 }
 
-@test "--search is capped at 50" {
-  run "$ADDSONG" --search 999 "x"
+@test "--results is capped at 50" {
+  run "$ADDSONG" --results 999 "x"
   [ "$status" -ne 0 ]
   grep -q 'capped at 50' <<<"$output"
 }
 
-@test "--search and a URL are mutually exclusive" {
-  run "$ADDSONG" --dry-run --search 3 "https://youtu.be/xyz"
+@test "--results and a URL are mutually exclusive" {
+  run "$ADDSONG" --dry-run --results 3 "https://youtu.be/xyz"
   [ "$status" -ne 0 ]
   grep -q 'mutually exclusive' <<<"$output"
 }
 
-@test "--from and --search are mutually exclusive" {
+@test "--from and --results are mutually exclusive" {
   tmp="$(mktemp)"; printf 'https://youtu.be/a\n' > "$tmp"
-  run "$ADDSONG" --from "$tmp" --search 2 "x"
+  run "$ADDSONG" --from "$tmp" --results 2 "x"
   [ "$status" -ne 0 ]
   grep -q 'exclusive' <<<"$output"
   rm -f "$tmp"
 }
 
-@test "--playlist and --search are mutually exclusive" {
-  run "$ADDSONG" --playlist --search 2 "https://youtube.com/playlist?list=x"
+@test "--playlist and --results are mutually exclusive" {
+  run "$ADDSONG" --playlist --results 2 "https://youtube.com/playlist?list=x"
   [ "$status" -ne 0 ]
   grep -q 'exclusive' <<<"$output"
 }
@@ -644,41 +644,41 @@ subs_teardown() {
   teardown_stubs
 }
 
-# --- clear-ledger --------------------------------------------------------
+# --- forget --------------------------------------------------------
 #
-# clear-ledger forgets every imported track by removing the dedup ledger.
+# forget forgets every imported track by removing the dedup ledger.
 # It's destructive, so it confirms at a terminal and refuses without one
 # unless -y is given. These tests need no yt-dlp/ffmpeg (it exits before
 # preflight), only a populated ADDSONG_LEDGER.
 
-@test "clear-ledger -y wipes a populated ledger" {
+@test "forget -y wipes a populated ledger" {
   led="$(mktemp)"
   printf 'VID1\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$led"
   printf 'VID2\tArtist2\tTitle2\t2024-01-02T00:00:00\n' >> "$led"
-  run env ADDSONG_LEDGER="$led" "$ADDSONG" clear-ledger -y
+  run env ADDSONG_LEDGER="$led" "$ADDSONG" forget -y
   [ "$status" -eq 0 ]
-  grep -q 'Cleared' <<<"$output"
+  grep -q 'Forgot' <<<"$output"
   [ ! -s "$led" ]   # removed (or empty)
   rm -f "$led"
 }
 
-@test "clear-ledger reports an already-empty ledger" {
+@test "forget reports an already-empty ledger" {
   led="$(mktemp)"   # exists but empty
-  run env ADDSONG_LEDGER="$led" "$ADDSONG" clear-ledger
+  run env ADDSONG_LEDGER="$led" "$ADDSONG" forget
   [ "$status" -eq 0 ]
   grep -q 'already empty' <<<"$output"
   rm -f "$led"
 }
 
-@test "clear-ledger refuses without confirmation when there's no terminal" {
+@test "forget refuses without confirmation when there's no terminal" {
   command -v setsid >/dev/null 2>&1 || skip "setsid not available"
   led="$(mktemp)"
   printf 'VID1\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$led"
   # setsid detaches from the controlling terminal, so opening /dev/tty fails
   # and the unconfirmed clear must bail out rather than prompt or wipe.
-  run setsid env ADDSONG_LEDGER="$led" "$ADDSONG" clear-ledger </dev/null
+  run setsid env ADDSONG_LEDGER="$led" "$ADDSONG" forget </dev/null
   [ "$status" -ne 0 ]
-  grep -q 'refusing to clear' <<<"$output"
+  grep -q 'refusing to forget' <<<"$output"
   [ -s "$led" ]     # left untouched
   rm -f "$led"
 }

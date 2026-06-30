@@ -10,9 +10,9 @@ _addsong() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  local subcommands="subscribe unsubscribe list sync clear-ledger"
-  local opts="--playlist --from --search --format --quality -y --yes --edit \
---force --dry-run --quiet --verbose --no-color --notify --no-progress \
+  local subcommands="subscribe unsubscribe list sync forget"
+  local opts="--playlist --from --results --format --quality -y --yes --review \
+--reimport -n --dry-run -q --quiet -v --verbose --no-color --notify --no-progress \
 -h --help --version"
 
   # Complete the argument that follows an option that takes a value.
@@ -29,7 +29,7 @@ _addsong() {
       # shellcheck disable=SC2207
       COMPREPLY=( $(compgen -f -- "$cur") )
       return ;;
-    --search)
+    --results)
       return ;;   # expects a number; nothing to complete
   esac
 

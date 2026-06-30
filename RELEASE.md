@@ -5,23 +5,23 @@ The main repo is already pushed to https://github.com/ado11231/apple-music-pipel
 ## 1. Tag And Push The Release
 
 The version in the script (`VERSION` in `addsong`) and the tag must match.
-It is currently `1.3.0`.
+It is currently `1.4.0`.
 
 ```bash
-git tag -a v1.3.0 -m "addsong 1.3.0"
-git push origin v1.3.0
+git tag -a v1.4.0 -m "addsong 1.4.0"
+git push origin v1.4.0
 ```
 
 GitHub now serves a source tarball at:
 
 ```
-https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.3.0.tar.gz
+https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.4.0.tar.gz
 ```
 
 ## 2. Compute The Tarball Checksum
 
 ```bash
-curl -sL https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.3.0.tar.gz \
+curl -sL https://github.com/ado11231/apple-music-pipeline/archive/refs/tags/v1.4.0.tar.gz \
   | shasum -a 256
 ```
 
@@ -52,7 +52,7 @@ Commit and push:
 ```bash
 cd ~/homebrew-tap
 git add Formula/addsong.rb
-git commit -m "addsong 1.3.0"
+git commit -m "addsong 1.4.0"
 git push
 ```
 
@@ -60,7 +60,7 @@ git push
 
 ```bash
 brew install ado11231/tap/addsong
-addsong --version            # => addsong 1.3.0
+addsong --version            # => addsong 1.4.0
 ```
 
 Optionally audit the formula before publishing:
@@ -83,7 +83,7 @@ brew test addsong
 from the **`main`** branch, so a normal `git push` to `main` is all it takes for
 new users to get the latest script — no tag or checksum step like the Homebrew
 tap needs. To pin an installer to a specific ref instead, users can set
-`ADDSONG_REF` (e.g. `ADDSONG_REF=v1.3.0`) before running it.
+`ADDSONG_REF` (e.g. `ADDSONG_REF=v1.4.0`) before running it.
 
 ## Adding More Tools To The Same Tap
 

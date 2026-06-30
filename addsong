@@ -6,7 +6,7 @@
 #
 #   addsong "https://www.youtube.com/watch?v=..."          single track (URL)
 #   addsong "queen bohemian rhapsody"                       top YouTube result
-#   addsong --search 3 "80s disco mix"                      top 3 results
+#   addsong --results 3 "80s disco mix"                      top 3 results
 #   addsong --playlist "https://www.youtube.com/playlist?list=..."
 #   addsong subscribe "https://www.youtube.com/playlist?list=..."
 #   addsong sync                                            # import new tracks from every subscription
@@ -25,7 +25,7 @@ set -euo pipefail
 
 # Config (all overridable via environment)
 
-VERSION="1.3.0"
+VERSION="1.4.0"
 
 # Load defaults from a config file of KEY=VALUE lines (parsed, not sourced, so it
 # cannot run arbitrary code). Only ADDSONG_* keys are honored, and a value already
@@ -69,16 +69,16 @@ YTDLP_HARD_ERRORS='private video|members-only|members only|video unavailable|thi
 PROG="$(basename "$0")"
 
 # Flags
-PLAYLIST=0      # --playlist: Expand a playlist URL into individual tracks.
-ASSUME_YES=0    # -y/--yes:   Never prompt; accept scraped/cleaned metadata.
-EDIT_FORCE=0    # --edit:     Always prompt to review (even in playlists).
-FORCE=0         # --force:    Import even if the track is already in the ledger.
-DRYRUN=0        # --dry-run:  Resolve and show metadata; download/import nothing.
-FROM_FILE=""    # --from F:   Read URLs (one per line) from a file, or - for stdin.
-SEARCH=0        # --search N: Treat the arg as a free-text YouTube search (N results).
-SUBCMD=""       # Subcommand verb when present (subscribe, unsubscribe, list, sync, clear-ledger).
-QUIET=0         # --quiet:   Suppress non-error info banners and status lines.
-VERBOSE=0       # --verbose: Surface yt-dlp/ffmpeg stderr.
+PLAYLIST=0      # --playlist:  Expand a playlist URL into individual tracks.
+ASSUME_YES=0    # -y/--yes:    Never prompt; accept scraped/cleaned metadata.
+REVIEW_FORCE=0  # --review:    Always prompt to review (even in playlists).
+REIMPORT=0      # --reimport:  Import even if the track is already in the ledger.
+DRYRUN=0        # -n/--dry-run: Resolve and show metadata; download/import nothing.
+FROM_FILE=""    # --from F:    Read URLs (one per line) from a file, or - for stdin.
+RESULTS=0       # --results N: Treat the arg as a free-text YouTube search (N results).
+SUBCMD=""       # Subcommand verb when present (subscribe, unsubscribe, list, sync, forget).
+QUIET=0         # -q/--quiet:  Suppress non-error info banners and status lines.
+VERBOSE=0       # -v/--verbose: Surface yt-dlp/ffmpeg stderr.
 NO_COLOR_FLAG=0 # --no-color: Explicitly disable colored output.
 NOTIFY=0        # --notify:  Fire a desktop notification per added track.
 case "${ADDSONG_NOTIFY:-}" in 1|true|yes|on) NOTIFY=1 ;; esac
@@ -206,36 +206,35 @@ USAGE:
     $PROG unsubscribe <playlist-url>    drop a subscription
     $PROG list                          show subscribed playlists
     $PROG sync [options]                import new tracks from every subscription
-    $PROG clear-ledger [-y]             forget every imported track (reset dedup)
+    $PROG forget [-y]                   forget every imported track (reset dedup)
     $PROG --help
 
 SUBCOMMANDS:
     subscribe <url>    Remember a playlist URL for repeat syncs.
     unsubscribe <url>  Forget a playlist URL.
     list              Print the currently subscribed playlist URLs.
-    sync               Re-import any new tracks from each subscribed playlist
-                      (already-imported tracks are skipped via the ledger, so
-                      running it daily keeps your library in step with a
-                      YouTube playlist for free). Composes with --force,
-                      --dry-run, --edit, -y.
-    clear-ledger       Forget every imported track by clearing the dedup
-                      ledger, so future adds/syncs treat each track as new
-                      again. Prompts to confirm at a terminal; pass -y to skip
-                      the prompt (required when there's no terminal).
+    sync              Re-import any new tracks from each subscribed playlist
+                      (already-imported tracks are skipped, so running it daily
+                      keeps your library in step with a YouTube playlist for
+                      free). Composes with --reimport, --dry-run, --review, -y.
+    forget            Forget every imported track, so future adds/syncs treat
+                      each track as new again. Prompts to confirm at a terminal;
+                      pass -y to skip the prompt (required when there's no
+                      terminal).
 
 OPTIONS:
     --playlist        Treat the URL as a playlist and import every track.
     --from FILE       Read URLs (one per line) from FILE, or - for stdin.
-    --search N        Treat the argument as a free-text YouTube search and
+    --results N       Treat the argument as a free-text YouTube search and
                       import the top N results (1-50; default 1 when the
                       argument is not a URL). No new dependencies.
     -y, --yes         Don't prompt; accept the scraped/cleaned metadata as-is.
-    --edit            Always prompt to review metadata (even for playlists).
-    --force           Import even if this track was imported before.
-    --dry-run         Resolve and show metadata; download/import nothing.
-    --quiet           Suppress info banners and per-track status lines
+    --review          Always prompt to review metadata (even for playlists).
+    --reimport        Import even if this track was imported before.
+    -n, --dry-run     Resolve and show metadata; download/import nothing.
+    -q, --quiet       Suppress info banners and per-track status lines
                       (errors are still printed).
-    --verbose         Surface yt-dlp/ffmpeg stderr for troubleshooting.
+    -v, --verbose     Surface yt-dlp/ffmpeg stderr for troubleshooting.
     --no-progress     Use the indeterminate spinner instead of yt-dlp's real
                       download bar (the bar is on by default at a TTY; also
                       via ADDSONG_PROGRESS=0).
@@ -252,16 +251,16 @@ OPTIONS:
 
 ARGUMENTS:
     <url-or-query>    A YouTube (or other yt-dlp-supported) URL, or -- with
-                      --search / by default -- a free-text search query.
+                      --results / by default -- a free-text search query.
                       Examples:
                         addsong "https://www.youtube.com/watch?v=..."
                         addsong "queen bohemian rhapsody"
-                        addsong --search 3 "80s disco mix"
+                        addsong --results 3 "80s disco mix"
 
 INTERACTIVE REVIEW:
     For a single track in a terminal, $PROG shows the scraped artist and title
     and lets you accept them (Enter), edit them (e), or skip (s) before import.
-    Playlists default to non-interactive; use --edit to review each track,
+    Playlists default to non-interactive; use --review to review each track,
     or -y to silence the prompt entirely.
 
 ENVIRONMENT:
@@ -283,7 +282,7 @@ ENVIRONMENT:
 EXAMPLES:
     $PROG "https://www.youtube.com/watch?v=..."
     $PROG "queen bohemian rhapsody"
-    $PROG --search 3 "80s disco mix"
+    $PROG --results 3 "80s disco mix"
     $PROG --playlist "https://www.youtube.com/playlist?list=PL..."
     $PROG subscribe "https://www.youtube.com/playlist?list=PL..."
     $PROG sync -y            # import new tracks from subscriptions, no prompts
@@ -387,29 +386,29 @@ ledger_add() {
 # Forget every imported track: remove the ledger so future runs treat each
 # track as new again (re-downloading/re-importing on the next add or sync).
 # Destructive, so confirm at a TTY unless -y/--yes was given; refuse without a
-# TTY when unconfirmed so a stray clear-ledger in a script cannot wipe it.
+# TTY when unconfirmed so a stray forget in a script cannot wipe it.
 ledger_clear() {
   if [[ ! -s "$LEDGER" ]]; then
-    printf 'Ledger is already empty (nothing imported yet).\n'
+    printf 'Nothing imported yet (history is already empty).\n'
     return 0
   fi
   local n ans
   n="$(grep -c '' "$LEDGER" 2>/dev/null || echo 0)"
   if [[ "$ASSUME_YES" -ne 1 ]]; then
     if { true; } 2>/dev/null <>/dev/tty; then
-      printf 'Clear %s imported track(s) from the ledger? Future runs may re-import them. [y/N] ' \
+      printf 'Forget %s imported track(s)? Future runs may re-import them. [y/N] ' \
         "$n" > /dev/tty
       read -r ans < /dev/tty || ans=""
       case "$ans" in
         y|Y|yes|YES) ;;
-        *) printf 'Cancelled. Ledger left untouched.\n'; return 0 ;;
+        *) printf 'Cancelled. Nothing forgotten.\n'; return 0 ;;
       esac
     else
-      die "refusing to clear the ledger without confirmation (re-run with -y to confirm)"
+      die "refusing to forget imported tracks without confirmation (re-run with -y to confirm)"
     fi
   fi
   rm -f "$LEDGER"
-  status "Cleared" "$n track(s) from the ledger"
+  status "Forgot" "$n imported track(s)"
 }
 
 # Subscriptions
@@ -458,7 +457,7 @@ subs_list() {
 
 # Iterate every subscribed playlist URL, expand it, and import only tracks not
 # already in the ledger (the ledger is the dedup source of truth). Composes
-# with --dry-run / --force / --edit / -y like a normal playlist run.
+# with --dry-run / --reimport / --review / -y like a normal playlist run.
 subs_sync() {
   [[ -s "$SUBSCRIPTIONS" ]] \
     || { err "no subscriptions yet -- see '$PROG list'"; exit 1; }
@@ -722,7 +721,7 @@ process_one() {
   track_no="$m_trackno"
 
   # Duplicate guard.
-  if [[ "$FORCE" -ne 1 ]] && ledger_has "$id"; then
+  if [[ "$REIMPORT" -ne 1 ]] && ledger_has "$id"; then
     status "Skipped" "$artist - $title (already imported)"
     return 2
   fi
@@ -839,12 +838,12 @@ process_one() {
 }
 
 # Decide whether to review interactively.
-#   --edit forces on; -y forces off; otherwise on for a single track at a TTY.
+#   --review forces on; -y forces off; otherwise on for a single track at a TTY.
 interactive_for() {
   # $1 = Is this a playlist run? (1/0); reads the global have_tty.
   if [[ "$DRYRUN" -eq 1 ]]; then echo 0; return; fi      # Nothing to confirm.
   if [[ "$ASSUME_YES" -eq 1 ]]; then echo 0; return; fi
-  if [[ "$EDIT_FORCE" -eq 1 ]]; then echo "$have_tty"; return; fi
+  if [[ "$REVIEW_FORCE" -eq 1 ]]; then echo "$have_tty"; return; fi
   if [[ "$1" -eq 1 ]]; then echo 0; return; fi   # Playlists default to no prompt.
   echo "$have_tty"
 }
@@ -907,7 +906,7 @@ main() {
   # a URL or a YouTube search (URLs always start with http(s)://), so intercept
   # it as the verb rather than routing it into the search/URL path below.
   case "${1:-}" in
-    subscribe|unsubscribe|list|sync|clear-ledger)
+    subscribe|unsubscribe|list|sync|forget)
       SUBCMD="$1"; shift
       # If help or version was requested alone, honor it immediately.
       [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { usage; exit 0; }
@@ -921,11 +920,11 @@ main() {
       --version)   printf '%s %s\n' "$PROG" "$VERSION"; exit 0 ;;
       --playlist)  PLAYLIST=1 ;;
       -y|--yes)    ASSUME_YES=1 ;;
-      --edit)      EDIT_FORCE=1 ;;
-      --force)     FORCE=1 ;;
-      --dry-run)   DRYRUN=1 ;;
-      --quiet)     QUIET=1 ;;
-      --verbose)   VERBOSE=1 ;;
+      --review)    REVIEW_FORCE=1 ;;
+      --reimport)  REIMPORT=1 ;;
+      -n|--dry-run) DRYRUN=1 ;;
+      -q|--quiet)  QUIET=1 ;;
+      -v|--verbose) VERBOSE=1 ;;
       --no-color)  NO_COLOR_FLAG=1 ;;
       --notify)    NOTIFY=1 ;;
       --no-progress) PROGRESS=0 ;;
@@ -937,9 +936,9 @@ main() {
                    { [[ "$AUDIO_QUALITY" =~ ^[0-9]+$ ]] && (( AUDIO_QUALITY <= 10 )); } \
                      || die "--quality must be an integer 0-10 (got: '$AUDIO_QUALITY')"
                    shift ;;
-      --search)    SEARCH="${2:-}"; [[ -n "$SEARCH" ]] || die "--search needs a number (e.g. --search 3)"
-                   [[ "$SEARCH" =~ ^[1-9][0-9]*$ ]] || die "--search needs a positive integer (got: '$SEARCH')"
-                   (( SEARCH <= 50 )) || die "--search is capped at 50 (use a playlist URL for more)"
+      --results)   RESULTS="${2:-}"; [[ -n "$RESULTS" ]] || die "--results needs a number (e.g. --results 3)"
+                   [[ "$RESULTS" =~ ^[1-9][0-9]*$ ]] || die "--results needs a positive integer (got: '$RESULTS')"
+                   (( RESULTS <= 50 )) || die "--results is capped at 50 (use a playlist URL for more)"
                    shift ;;
       --from)      FROM_FILE="${2:-}"; [[ -n "$FROM_FILE" ]] || die "--from needs a file (or - for stdin)"; shift ;;
       --)          shift; URL="${1:-}"; break ;;
@@ -957,7 +956,7 @@ main() {
       subscribe)   [[ -n "$URL" ]] || die "subscribe needs a URL"; subs_add    "$URL"; exit 0 ;;
       unsubscribe) [[ -n "$URL" ]] || die "unsubscribe needs a URL"; subs_remove "$URL"; exit 0 ;;
       list)        subs_list; exit 0 ;;
-      clear-ledger) ledger_clear; exit 0 ;;
+      forget) ledger_clear; exit 0 ;;
       # sync needs preflight (yt-dlp + watch dir), but short-circuit when there
       # are no subscriptions so the user does not need yt-dlp installed just
       # to see the friendly "none yet" message.
@@ -970,25 +969,25 @@ main() {
     esac
   fi
 
-  # Decide input mode. --from (file), --playlist (URL), --search (free text),
+  # Decide input mode. --from (file), --playlist (URL), --results (free text),
   # or a single URL. They are mutually exclusive. Only the sync subcommand can
   # legitimately have no URL at all here, so skip the guards in that case.
   if [[ -z "$SUBCMD" ]]; then
     if [[ -n "$FROM_FILE" ]]; then
-      { [[ "$PLAYLIST" -eq 1 ]] || [[ "$SEARCH" -gt 0 ]]; } && die "--from is exclusive with --playlist/--search"
+      { [[ "$PLAYLIST" -eq 1 ]] || [[ "$RESULTS" -gt 0 ]]; } && die "--from is exclusive with --playlist/--results"
       [[ -n "$URL" ]] && die "--from is exclusive with a URL/search argument"
     elif [[ "$PLAYLIST" -eq 1 ]]; then
-      [[ "$SEARCH" -gt 0 ]] && die "--playlist is exclusive with --search"
+      [[ "$RESULTS" -gt 0 ]] && die "--playlist is exclusive with --results"
       [[ -z "$URL" ]] && die "--playlist needs a URL"
       [[ "$URL" != http://* && "$URL" != https://* ]] && die "--playlist needs a URL (got: '$URL')"
-    elif [[ "$SEARCH" -gt 0 ]]; then
-      [[ -z "$URL" ]] && die "--search needs a query (try: $PROG --search 3 \"80s disco mix\")"
-      [[ "$URL" == http://* || "$URL" == https://* ]] && die "--search and a URL are mutually exclusive"
+    elif [[ "$RESULTS" -gt 0 ]]; then
+      [[ -z "$URL" ]] && die "--results needs a query (try: $PROG --results 3 \"80s disco mix\")"
+      [[ "$URL" == http://* || "$URL" == https://* ]] && die "--results and a URL are mutually exclusive"
     elif [[ -z "$URL" ]]; then
       usage >&2; exit 1
     elif [[ "$URL" != http://* && "$URL" != https://* ]]; then
       # Default: a bare non-URL argument is a 1-result YouTube search.
-      SEARCH=1
+      RESULTS=1
     fi
   fi
 
@@ -1053,7 +1052,7 @@ See the Setup section in the README." ;;
   [[ "$SUBCMD" == "sync" ]] && subs_sync
 
   if [[ -n "$FROM_FILE" ]]; then
-    rev="$(interactive_for 1)"   # Batch: non-interactive unless --edit.
+    rev="$(interactive_for 1)"   # Batch: non-interactive unless --review.
     if [[ "$FROM_FILE" == "-" ]]; then
       run_url_stream "$rev"
     else
@@ -1071,9 +1070,9 @@ See the Setup section in the README." ;;
     run_url_stream "$rev" \
       <<< "$(printf '%s\n' "$ids" | sed '/^$/d; s#^#https://www.youtube.com/watch?v=#')"
     finish_batch
-  elif [[ "$SEARCH" -gt 0 ]]; then
+  elif [[ "$RESULTS" -gt 0 ]]; then
     say "${PFX_BANNER}Searching YouTube for: $URL"
-    ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "ytsearch${SEARCH}:${URL}" 2>/dev/null)" \
+    ids="$(yt-dlp --flat-playlist --print '%(id)s' -- "ytsearch${RESULTS}:${URL}" 2>/dev/null)" \
       || die "search failed: $URL"
     [[ -n "$ids" ]] || die "no search results for: $URL"
 

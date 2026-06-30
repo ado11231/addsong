@@ -18,21 +18,21 @@ _addsong() {
     'unsubscribe:Forget a subscribed playlist URL'
     'list:Show subscribed playlists'
     'sync:Import new tracks from every subscription'
-    'clear-ledger:Forget every imported track (reset dedup)'
+    'forget:Forget every imported track (reset dedup)'
   )
 
   _arguments -s -C \
     '--playlist[Treat the URL as a playlist and import every track]' \
     '--from[Read URLs from a file (- for stdin)]:file:_files' \
-    '--search[Free-text YouTube search; import the top N results]:count' \
+    '--results[Free-text YouTube search; import the top N results]:count' \
     '--format[Output audio format]:format:(m4a mp3 flac opus wav aac)' \
     '--quality[Audio quality 0-10 (0=best)]:quality:(0 1 2 3 4 5 6 7 8 9 10)' \
     '(-y --yes)'{-y,--yes}'[Do not prompt; accept the scraped metadata as-is]' \
-    '--edit[Always prompt to review metadata]' \
-    '--force[Import even if the track was imported before]' \
-    '--dry-run[Resolve and show metadata; download/import nothing]' \
-    '--quiet[Suppress info banners and per-track status lines]' \
-    '--verbose[Surface yt-dlp/ffmpeg stderr]' \
+    '--review[Always prompt to review metadata]' \
+    '--reimport[Import even if the track was imported before]' \
+    '(-n --dry-run)'{-n,--dry-run}'[Resolve and show metadata; download/import nothing]' \
+    '(-q --quiet)'{-q,--quiet}'[Suppress info banners and per-track status lines]' \
+    '(-v --verbose)'{-v,--verbose}'[Surface yt-dlp/ffmpeg stderr]' \
     '--no-color[Disable colored output]' \
     '--notify[Fire a desktop notification per imported track]' \
     '--no-progress[Use the spinner instead of the download bar]' \

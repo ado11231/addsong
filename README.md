@@ -105,7 +105,7 @@ export ADDSONG_WATCH_DIR="/path/to/your/folder"
 addsong "https://www.youtube.com/watch?v=..."
 
 # see the top 3 matches and choose
-addsong --search 3 "80s disco mix"
+addsong --results 3 "80s disco mix"
 
 # add a whole playlist at once
 addsong --playlist "https://www.youtube.com/playlist?list=..."
@@ -128,28 +128,28 @@ Stop following with `addsong unsubscribe "<link>"`.
 
 `addsong` remembers what it has already imported so it never adds the same song
 twice. To wipe that memory — so the next add or `sync` treats every song as new
-again — clear the ledger:
+again — tell it to `forget`:
 
 ```bash
-addsong clear-ledger        # asks you to confirm first
-addsong clear-ledger -y     # skip the confirmation
+addsong forget        # asks you to confirm first
+addsong forget -y     # skip the confirmation
 ```
 
-To re-add just one song you already have, use `--force` instead.
+To re-add just one song you already have, use `--reimport` instead.
 
 ## All The Options
 
 The ones you'll reach for most:
 
-- `--search N` — Show the top N matches and let you pick (1–50).
+- `--results N` — Show the top N matches and let you pick (1–50).
 - `--playlist` — Add every song in a playlist.
 - `--from FILE` — Add every link in a file, one per line.
 - `-y` — Skip the confirm prompt and just add it.
-- `--edit` — Always let you fix the title first.
+- `--review` — Always let you fix the title first.
 
 And a few for when you need them:
 
-- `--force` — Add a song again even if you already have it.
+- `--reimport` — Add a song again even if you already have it.
 - `--dry-run` — Preview what would happen; downloads nothing.
 - `--format FMT` — Output format (e.g. `mp3`, `flac`, `opus`); default `m4a`.
 - `--quality N` — Audio quality `0`–`10`, where `0` is best (default `0`).
@@ -199,7 +199,7 @@ Open a new terminal, then type `addsong ` and press **Tab**.
 - **It downloaded but isn't on my phone.** That part is Apple's job — turn on
   **Sync Library** on every device and keep your computer on and online.
 - **It grabbed the wrong version.** A name search takes YouTube's top hit, which
-  isn't always the real one — use `--edit` to fix it, or `--dry-run` to preview
+  isn't always the real one — use `--review` to fix it, or `--dry-run` to preview
   before adding.
 
 ## For Developers

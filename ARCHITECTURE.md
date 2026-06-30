@@ -21,9 +21,9 @@ Platform detection lives in `detect_os()` (`mac` / `win` / `wsl` / `linux` /
    otherwise the uploader becomes the artist.
 3. **Review (interactive runs).** For a single track at a terminal, the resolved
    artist/title are shown so you can accept, edit, or skip before any download.
-   Playlists are non-interactive unless `--edit` is passed.
+   Playlists are non-interactive unless `--review` is passed.
 4. **Duplicate guard.** Each imported track's video id is recorded in a ledger
-   (`ADDSONG_LEDGER`). Already-seen ids are skipped unless `--force` is given.
+   (`ADDSONG_LEDGER`). Already-seen ids are skipped unless `--reimport` is given.
 5. **Download + tag.** `yt-dlp` extracts the audio and embeds the thumbnail;
    `ffmpeg` writes the chosen title/artist tags (copying streams, so the embedded
    artwork is preserved). At a terminal a spinner shows progress while each step
