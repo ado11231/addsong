@@ -9,6 +9,6 @@ pkgbase = addsong
 	depends = ffmpeg
 	optdepends = bash-completion: tab completion for bash
 	source = addsong-1.0.0.tar.gz::https://github.com/ado11231/addsong/archive/refs/tags/v1.0.0.tar.gz
-	sha256sums = 0000000000000000000000000000000000000000000000000000000000000000
+	sha256sums = d2be13cb705f4f802172532078ddebb77bf34aa663841b0a18cc0aa257b75096
 
 pkgname = addsong
