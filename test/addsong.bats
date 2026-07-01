@@ -1,20 +1,19 @@
 #!/usr/bin/env bats
 #
-# Unit tests for addsong's pure helpers and config parsing. The script gates
-# main() behind a source guard, so sourcing it loads the functions without
-# parsing arguments, running preflight, or touching the network.
+# Unit tests for addsong helpers and config parsing.
+# Sourcing loads functions without running main or touching the network.
 
 setup() {
   ADDSONG="${BATS_TEST_DIRNAME}/../addsong"
 }
 
-# Run a snippet with the script sourced, in an isolated subshell so the
-# script's `set -euo pipefail` does not leak into the bats runner.
+# Run a snippet with addsong sourced in a subshell.
+# Keeps set euo pipefail from leaking into bats.
 sourced() {
   run bash -c "source '$ADDSONG'; $1"
 }
 
-# --- clean_meta -----------------------------------------------------------
+# clean_meta
 
 @test "clean_meta strips (Official Video)" {
   sourced "printf '%s' 'Bohemian Rhapsody (Official Video)' | clean_meta"
@@ -47,10 +46,10 @@ sourced() {
   [ "$output" = 'Bohemian Rhapsody' ]
 }
 
-# --- safe_name ------------------------------------------------------------
+# safe_name
 
 @test "safe_name replaces slashes, colons and backslashes" {
-  # Pass the input through the environment to avoid backslash-quoting layers.
+  # Pass input through env to avoid backslash quoting issues.
   export IN='AC/DC: Back\Black'
   run bash -c "source '$ADDSONG'; safe_name \"\$IN\""
   [ "$status" -eq 0 ]
@@ -62,7 +61,7 @@ sourced() {
   [ "$output" = 'Artist - Title' ]
 }
 
-# --- config file parsing --------------------------------------------------
+# config file parsing
 
 @test "config file supplies ADDSONG_* defaults" {
   cfg="$(mktemp)"
@@ -96,26 +95,19 @@ sourced() {
   [ "$output" = 'wav' ]
 }
 
-# --- --results argument parsing -------------------------------------------
+# results argument parsing
 #
-# main() is gated by the source guard, so to exercise arg parsing we run the
-# script directly in a subshell with stubs on PATH (no yt-dlp/ffmpeg network).
-# A fake yt-dlp answers the flat-playlist search-expansion call with canned IDs
-# and the per-track metadata call with canned fields; --dry-run keeps it from
-# touching the watch folder or ledger.
+# Run the script with stubs on PATH to test arg parsing.
+# Fake yt dlp returns canned ids and metadata. Dry run skips watch folder and ledger.
 
 setup_stubs() {
   STUBBIN="$(mktemp -d)"
   WATCH="$(mktemp -d)"
   mkdir -p "$STUBBIN"
-  # Fake yt-dlp covering all three calls the script makes:
-  #   --flat-playlist  -> canned ids (search/playlist expansion)
-  #   --extract-audio  -> writes a staged audio file next to the -o template
-  #   otherwise        -> prints the 8 per-track metadata lines
-  # Env toggles let the failure tests force a specific step to error:
-  #   STUB_META_FAIL=1  fail the metadata read
-  #   STUB_DL_FAIL=1    fail the download/extract step
-  #   STUB_META=...     override the canned metadata block
+  # Fake yt dlp for flat playlist ids, extract audio, and metadata lines.
+  # STUB_META_FAIL fails metadata read.
+  # STUB_DL_FAIL fails download step.
+  # STUB_META overrides canned metadata.
   cat > "$STUBBIN/yt-dlp" <<'STUB'
 #!/usr/bin/env bash
 for a in "$@"; do
@@ -142,8 +134,8 @@ done
 if [[ "$extract" -eq 1 ]]; then
   [[ "${STUB_DL_FAIL:-0}" == 1 ]] && { echo 'ERROR: unable to download video data' >&2; exit 1; }
   printf 'audio' > "$(dirname "$out")/VID000.$fmt"
-  # Fast path: the combined download+metadata call captures fields via
-  # --print-to-file. Emulate that by appending the canned metadata block.
+  # Fast path combined download and metadata via print to file
+  # Append canned metadata block to emulate it
   [[ -n "$metafile" ]] && printf '%s\n' "${STUB_META:-VID000
 Test Title
 Test Uploader
@@ -155,8 +147,8 @@ NA}" >> "$metafile"
   exit 0
 fi
 [[ "${STUB_META_FAIL:-0}" == 1 ]] && { echo 'ERROR: Private video' >&2; exit 1; }
-# A benign stderr warning: run_ytdlp captures it to the err file and only
-# surfaces it under --verbose (used by the verbosity tests).
+# Benign stderr warning run_ytdlp captures to err file
+# Surfaces only under verbose flag used by verbosity tests
 echo 'WARNING: addsong-stub-warning' >&2
 printf '%s\n' "${STUB_META:-VID000
 Test Title
@@ -167,8 +159,8 @@ NA
 NA
 NA}"
 STUB
-  # Fake ffmpeg: write the (tagged) output file it is asked to produce so the
-  # script's "no output / empty file" guards pass. STUB_FF_FAIL=1 forces an error.
+  # Fake ffmpeg writes the output file so empty file guards pass.
+  # STUB_FF_FAIL forces an error.
   cat > "$STUBBIN/ffmpeg" <<'STUB'
 #!/usr/bin/env bash
 [[ "${STUB_FF_FAIL:-0}" == 1 ]] && { echo 'ERROR: tagging failed' >&2; exit 1; }
@@ -193,7 +185,7 @@ teardown_stubs() {
   setup_stubs
   run "$ADDSONG" --dry-run --results 2 "80s mix"
   [ "$status" -eq 0 ]
-  # Per-track lines are indented ("  Would add ..."); the summary line is not.
+  # Per track lines are indented. Summary line is not.
   [ "$(printf '%s\n' "$output" | grep -c '^  Would add')" -eq 2 ]
   teardown_stubs
 }
@@ -254,18 +246,17 @@ teardown_stubs() {
   grep -q 'exclusive' <<<"$output"
 }
 
-# --- process_one() pipeline ----------------------------------------------
+# process_one pipeline
 #
-# Exercise the full per-track pipeline against the fake yt-dlp/ffmpeg from
-# setup_stubs, asserting all three return codes. process_one is called
-# directly (sourced) so we observe its raw 0/2/1 rather than main()'s mapped
-# exit status. WATCH_DIR is normally filled in by main(), so we set it here.
+# Test the full per track pipeline with stub yt dlp and ffmpeg.
+# Call process_one directly to see raw return codes 0 2 and 1.
+# Set WATCH_DIR here because main normally sets it.
 
-# Source the script and run process_one with the stubs on PATH, capturing its
-# real return code. $1 = extra shell to run before the call (env toggles etc).
+# Source addsong and run process_one with stubs. Captures return code.
+# $1 is extra shell to run before the call.
 run_process_one() {
-  # PATH (with the stubs) is already exported by setup_stubs and inherited here.
-  # No retries/backoff so the failure case doesn't sleep.
+  # Stubs are already on PATH from setup_stubs.
+  # No retries so failure tests finish fast.
   run bash -c "
     export ADDSONG_RETRIES=0 ADDSONG_RETRY_DELAY=0
     $1
@@ -316,7 +307,7 @@ run_process_one() {
 
 @test "known id in URL is skipped with no download (zero-network dedup)" {
   setup_stubs
-  # An 11-char id parseable straight from the URL, already in the ledger.
+  # 11 char id from URL already in ledger.
   printf 'dQw4w9WgXcQ\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$ADDSONG_LEDGER"
   run bash -c "
     export ADDSONG_RETRIES=0 ADDSONG_RETRY_DELAY=0
@@ -330,7 +321,7 @@ run_process_one() {
   teardown_stubs
 }
 
-# --- --format / --quality flags ------------------------------------------
+# format and quality flags
 
 @test "--format rejects an unsupported value" {
   run "$ADDSONG" --format ogg "x"
@@ -358,12 +349,11 @@ run_process_one() {
   teardown_stubs
 }
 
-# --- --notify ------------------------------------------------------------
+# notify
 
 @test "--notify invokes a notifier for an added track" {
   setup_stubs
-  # Stub every notifier so this passes regardless of the runner's OS_MODE
-  # (notify-send on Linux/Windows/WSL; terminal-notifier/osascript on macOS).
+  # Stub every notifier so tests pass on any OS.
   for n in notify-send terminal-notifier osascript; do
     cat > "$STUBBIN/$n" <<STUB
 #!/usr/bin/env bash
@@ -391,7 +381,7 @@ STUB
   teardown_stubs
 }
 
-# --- --quiet / --verbose / non-TTY spinner -------------------------------
+# quiet verbose and spinner
 
 @test "--quiet suppresses status lines" {
   setup_stubs
@@ -427,9 +417,8 @@ STUB
 }
 
 @test "with_spinner runs synchronously and propagates exit when there's no TTY" {
-  # have_tty=0 forces the no-TTY branch: the command runs synchronously (its
-  # output is not swallowed), its exit status is returned, and no spinner frame
-  # or label is written (the spinner only ever paints to /dev/tty).
+  # have_tty=0 uses the no TTY branch. Command runs synchronously.
+  # Exit status is returned. No spinner output.
   run bash -c "source '$ADDSONG'; have_tty=0; with_spinner 'SpinLabel' bash -c 'echo HELLO; exit 7' && r=0 || r=\$?; echo \"rc=\$r\""
   grep -q 'HELLO' <<<"$output"
   grep -q 'rc=7' <<<"$output"
@@ -437,13 +426,13 @@ STUB
   ! grep -q '⠋' <<<"$output"
 }
 
-# --- run_ytdlp() retry / backoff / hard-error classification -------------
+# run_ytdlp retry and hard error handling
 #
-# run_ytdlp retries transient failures (linear backoff) and bails at once on a
-# permanent failure matching YTDLP_HARD_ERRORS. A counter file records how many
-# times the fake yt-dlp was invoked. Retries/backoff are set tiny so it's fast.
+# run_ytdlp retries transient failures and stops on hard errors.
+# Counter file tracks how many times fake yt dlp ran.
+# Retries and backoff are tiny for speed.
 
-# Write a fake yt-dlp whose body is $2 into dir $1, with a call counter at $1/n.
+# Write fake yt dlp with body $2 into dir $1. Counter at $1/n.
 make_ytdlp() {
   printf '0' > "$1/n"
   cat > "$1/yt-dlp" <<STUB
@@ -454,7 +443,7 @@ STUB
   chmod +x "$1/yt-dlp"
 }
 
-# Source the script (low retries/no backoff) and run run_ytdlp with the stub.
+# Source addsong and run run_ytdlp with the stub.
 run_run_ytdlp() {
   run bash -c "
     export PATH=\"$1:\$PATH\" ADDSONG_RETRIES=2 ADDSONG_RETRY_DELAY=0
@@ -476,7 +465,7 @@ run_run_ytdlp() {
   make_ytdlp "$bin" '[[ "$n" -eq 1 ]] && { echo "ERROR: unable to download (timed out)" >&2; exit 1; }; exit 0'
   run_run_ytdlp "$bin"
   grep -q 'RYRC=0' <<<"$output"
-  [ "$(cat "$bin/n")" -eq 2 ]   # one failed attempt + one success
+  [ "$(cat "$bin/n")" -eq 2 ]   # one failed attempt plus one success
   rm -rf "$bin"
 }
 
@@ -485,16 +474,14 @@ run_run_ytdlp() {
   make_ytdlp "$bin" 'echo "ERROR: Private video. Sign in if you have access." >&2; exit 1'
   run_run_ytdlp "$bin"
   grep -q 'RYRC=1' <<<"$output"
-  [ "$(cat "$bin/n")" -eq 1 ]   # bailed immediately, no retry
+  [ "$(cat "$bin/n")" -eq 1 ]   # single attempt no retry
   rm -rf "$bin"
 }
 
-# --- detect_os -----------------------------------------------------------
+# detect_os
 #
-# detect_os() reads $OSTYPE (and, on Linux, the kernel release for the WSL
-# signature). We override OSTYPE in the sourced subprocess. The WSL branch
-# can't be unit-tested (we can't fake /proc/sys/kernel/osrelease), so it is
-# exercised only manually / documented.
+# detect_os reads OSTYPE. Override OSTYPE in a sourced subprocess.
+# WSL branch is not unit tested here.
 
 @test "detect_os: darwin* -> mac" {
   run bash -c "OSTYPE=darwin23; source '$ADDSONG' 2>/dev/null; detect_os"
@@ -520,7 +507,7 @@ run_run_ytdlp() {
   [ "$output" = "other" ]
 }
 
-# --- default_watch_dir ---------------------------------------------------
+# default_watch_dir
 
 @test "default_watch_dir: mac uses the standard Apple Music path" {
   run bash -c "OSTYPE=darwin23; HOME=/tmp/fakehome; source '$ADDSONG' 2>/dev/null; default_watch_dir"
@@ -560,12 +547,10 @@ run_run_ytdlp() {
   [ "$output" = "/tmp/fakehome/Music/addsong" ]
 }
 
-# --- Subscriptions -------------------------------------------------------
+# subscriptions
 #
-# subscribe/unsubscribe/list operate on a small TSV of subscribed playlist
-# URLs (# comments allowed, blank lines skipped). sync iterates each
-# subscribed URL like --playlist would, and the importer ledger dedups
-# already-imported tracks -- the subscription file holds only URLs.
+# subscribe unsubscribe and list use a TSV of playlist URLs.
+# sync expands each URL like playlist mode. Ledger dedupes imports.
 
 subs_setup() {
   WATCH="$(mktemp -d)"
@@ -635,7 +620,7 @@ subs_teardown() {
 
 @test "list with no subscriptions prints a friendly hint" {
   subs_setup
-  : > "$SUBS"   # exists but empty
+  : > "$SUBS"   # empty file
   run "$ADDSONG" list
   [ "$status" -eq 0 ]
   grep -q 'No subscriptions yet' <<<"$output"
@@ -648,8 +633,8 @@ subs_teardown() {
   run "$ADDSONG" sync
   [ "$status" -ne 0 ]
   grep -q 'no subscriptions yet' <<<"$output"
-  # The empty-subscriptions short-circuit must not require yt-dlp/ffmpeg:
-  # grep finding no match exits 1, which is what we expect here.
+  # Empty subscriptions must skip preflight without yt dlp or ffmpeg.
+  # grep finding no match exits 1 as expected.
   run grep -q 'not found on PATH' <<<"$output"
   [ "$status" -eq 1 ]
   subs_teardown
@@ -661,10 +646,10 @@ subs_teardown() {
   printf 'https://youtu.be/PLabc\nhttps://youtu.be/PLxyz\n' > "$SUBS"
   run "$ADDSONG" sync --dry-run
   [ "$status" -eq 0 ]
-  # One "Syncing:" header per subscribed URL, one "Would add" per stub track.
+  # One Syncing header per URL. One Would add per stub track.
   [ "$(printf '%s\n' "$output" | grep -c '^Syncing:')" -eq 2 ]
   [ "$(printf '%s\n' "$output" | grep -c '^  Would add')" -eq 2 ]
-  # The summary counts the imported (would-add) tracks across both playlists.
+  # Summary counts would add tracks across both playlists.
   grep -q 'Would add 2' <<<"$output"
   subs_teardown
   teardown_stubs
@@ -681,12 +666,11 @@ subs_teardown() {
   teardown_stubs
 }
 
-# --- forget --------------------------------------------------------
+# forget
 #
-# forget forgets every imported track by removing the dedup ledger.
-# It's destructive, so it confirms at a terminal and refuses without one
-# unless -y is given. These tests need no yt-dlp/ffmpeg (it exits before
-# preflight), only a populated ADDSONG_LEDGER.
+# forget clears the import ledger.
+# Confirms at a terminal unless y flag is given.
+# These tests only need a populated ledger. No yt dlp or ffmpeg.
 
 @test "forget -y wipes a populated ledger" {
   led="$(mktemp)"
@@ -695,12 +679,12 @@ subs_teardown() {
   run env ADDSONG_LEDGER="$led" "$ADDSONG" forget -y
   [ "$status" -eq 0 ]
   grep -q 'Forgot' <<<"$output"
-  [ ! -s "$led" ]   # removed (or empty)
+  [ ! -s "$led" ]   # removed or empty
   rm -f "$led"
 }
 
 @test "forget reports an already-empty ledger" {
-  led="$(mktemp)"   # exists but empty
+  led="$(mktemp)"   # empty ledger file
   run env ADDSONG_LEDGER="$led" "$ADDSONG" forget
   [ "$status" -eq 0 ]
   grep -q 'already empty' <<<"$output"
@@ -711,11 +695,11 @@ subs_teardown() {
   command -v setsid >/dev/null 2>&1 || skip "setsid not available"
   led="$(mktemp)"
   printf 'VID1\tArtist\tTitle\t2024-01-01T00:00:00\n' > "$led"
-  # setsid detaches from the controlling terminal, so opening /dev/tty fails
-  # and the unconfirmed clear must bail out rather than prompt or wipe.
+  # setsid detaches from terminal so opening dev tty fails.
+  # Unconfirmed forget must bail without wiping.
   run setsid env ADDSONG_LEDGER="$led" "$ADDSONG" forget </dev/null
   [ "$status" -ne 0 ]
   grep -q 'refusing to forget' <<<"$output"
-  [ -s "$led" ]     # left untouched
+  [ -s "$led" ]     # ledger left untouched
   rm -f "$led"
 }

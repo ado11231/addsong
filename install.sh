@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# install.sh: one-command installer for addsong on Linux, WSL, Git Bash, and
-# (as a fallback) macOS. Installs the two dependencies it needs -- yt-dlp and
-# ffmpeg -- then drops the addsong script on your PATH.
+# One command installer for addsong on Linux, WSL, Git Bash, and macOS as fallback.
+# Installs yt-dlp and ffmpeg then puts addsong on your PATH.
 #
-# Usage:
+# Usage
 #   curl -fsSL https://ado11231.github.io/addsong/install.sh | bash
 #
-# macOS users should prefer:  brew install ado11231/tap/addsong
+# macOS users should prefer brew install ado11231/tap/addsong
 #
 # Honors NO_COLOR (https://no-color.org/). Override the download ref with
 # ADDSONG_REF (defaults to main) and the install dir with ADDSONG_BIN_DIR.
@@ -14,15 +13,15 @@ set -euo pipefail
 
 REPO="ado11231/addsong"
 REF="${ADDSONG_REF:-main}"
-# The default install pulls the script from GitHub Pages; pinning ADDSONG_REF to
-# a tag/branch falls back to the raw URL so you can install a specific version.
+# Default install pulls from GitHub Pages. Pinning ADDSONG_REF to a tag or branch
+# uses the raw URL so you can install a specific version.
 if [[ "$REF" == "main" ]]; then
   RAW_URL="https://ado11231.github.io/addsong/addsong"
 else
   RAW_URL="https://raw.githubusercontent.com/$REPO/$REF/addsong"
 fi
 
-# --- messaging (TTY + NO_COLOR aware, like addsong itself) -----------------
+# Messaging TTY and NO_COLOR aware like addsong
 C_INFO=""; C_OK=""; C_WARN=""; C_ERR=""; C_RESET=""
 if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
   C_INFO=$'\033[1m'; C_OK=$'\033[32m'; C_WARN=$'\033[33m'
@@ -33,7 +32,7 @@ ok()   { printf '  %s%s%s\n' "$C_OK"   "$*" "$C_RESET" >&2; }
 warn() { printf '  %s%s%s\n' "$C_WARN" "$*" "$C_RESET" >&2; }
 die()  { printf '%sinstall:%s %s\n' "$C_ERR" "$C_RESET" "$*" >&2; exit 1; }
 
-# --- platform detection (mirrors addsong's detect_os) ----------------------
+# Platform detection mirrors addsong detect_os
 detect_os() {
   case "${OSTYPE:-}" in
     darwin*)        echo mac ;;
@@ -49,7 +48,7 @@ detect_os() {
   esac
 }
 
-# Run a command with sudo when not already root and sudo exists.
+# Run a command with sudo when not root and sudo exists.
 as_root() {
   if [[ "$(id -u)" -eq 0 ]]; then "$@"
   elif command -v sudo >/dev/null 2>&1; then sudo "$@"
@@ -57,7 +56,7 @@ as_root() {
   fi
 }
 
-# Detect a package manager and install the named packages with it.
+# Detect a package manager and install the named packages.
 install_pkgs() {
   local pkgs=("$@") pm=""
   for c in pacman apt-get dnf yum zypper brew choco; do
@@ -76,12 +75,12 @@ install_pkgs() {
   esac
 }
 
-# --- preflight -------------------------------------------------------------
+# Preflight
 command -v curl >/dev/null 2>&1 || die "curl is required to run this installer."
 OS="$(detect_os)"
 info "addsong installer  (platform: $OS)"
 
-# --- dependencies ----------------------------------------------------------
+# Dependencies
 info "Checking dependencies ..."
 missing=()
 for dep in yt-dlp ffmpeg; do
@@ -94,8 +93,8 @@ for dep in yt-dlp ffmpeg; do
 done
 [[ ${#missing[@]} -gt 0 ]] && install_pkgs "${missing[@]}"
 
-# --- install the script ----------------------------------------------------
-# Prefer ~/.local/bin (on PATH by default on modern distros), else ~/bin.
+# Install the script
+# Prefer ~/.local/bin on PATH by default on modern distros, else ~/bin.
 if [[ -n "${ADDSONG_BIN_DIR:-}" ]]; then
   BIN_DIR="$ADDSONG_BIN_DIR"
 elif [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
@@ -114,7 +113,7 @@ curl -fsSL "$RAW_URL" -o "$tmp" || die "download failed: $RAW_URL"
 grep -q '^VERSION=' "$tmp" || die "downloaded file does not look like addsong; aborting."
 install -m 0755 "$tmp" "$BIN_DIR/addsong"
 
-# --- PATH ------------------------------------------------------------------
+# PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   rc="$HOME/.bashrc"
   [[ "${SHELL:-}" == *zsh* ]] && rc="$HOME/.zshrc"
@@ -127,6 +126,6 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   warn "Open a new terminal (or run: source \"$rc\") so 'addsong' is found."
 fi
 
-# --- verify ----------------------------------------------------------------
+# Verify
 ok "Installed: $("$BIN_DIR/addsong" --version 2>/dev/null || echo addsong)"
 info "Done. Try:  addsong \"songname\""

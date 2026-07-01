@@ -1,9 +1,9 @@
 # bash completion for addsong
 #
-# Install: source this file from your ~/.bashrc, e.g.
+# Install by sourcing from ~/.bashrc
 #     source /path/to/completions/addsong.bash
-# or drop it into your bash-completion directory (Homebrew installs it there
-# automatically). See the README (Shell completions) for details.
+# or drop into your bash completion directory. Homebrew installs it there
+# automatically. See README Shell completions for details.
 
 _addsong() {
   local cur prev
@@ -15,7 +15,7 @@ _addsong() {
 --reimport -n --dry-run -q --quiet -v --verbose --no-color --notify --no-progress \
 -h --help --version"
 
-  # Complete the argument that follows an option that takes a value.
+  # Complete the argument after an option that takes a value.
   case "$prev" in
     --format)
       # shellcheck disable=SC2207
@@ -30,11 +30,10 @@ _addsong() {
       COMPREPLY=( $(compgen -f -- "$cur") )
       return ;;
     --results)
-      return ;;   # expects a number; nothing to complete
+      return ;;   # expects a number, nothing to complete
   esac
 
-  # The first word can be a subcommand or an option (or a URL/query, which we
-  # can't complete). After that, only options are completable.
+  # First word can be a subcommand or option. After that only options complete.
   if [[ "$COMP_CWORD" -eq 1 ]]; then
     # shellcheck disable=SC2207
     COMPREPLY=( $(compgen -W "$subcommands $opts" -- "$cur") )
