@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "addsong"
+version = "1.0.0"
+description = "Download a song from a URL or YouTube search and auto-import it into Apple Music."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Adnan Alagic" }]
+keywords = ["apple-music", "yt-dlp", "ffmpeg", "music", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = ["rich>=13.0"]
+
+[project.scripts]
+addsong = "addsong.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ado11231/apple-music-pipeline"
+Source = "https://github.com/ado11231/apple-music-pipeline"
+Issues = "https://github.com/ado11231/apple-music-pipeline/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/addsong"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src/addsong"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra"
