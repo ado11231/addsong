@@ -122,3 +122,79 @@ def id_from_url(url: str) -> str | None:
     if _YT_ID_RE.match(id_part):
         return id_part
     return None
+
+
+# --- parse_meta ---------------------------------------------------------------
+#
+# Parses yt-dlp's 8-field --print block into structured track metadata. yt-dlp
+# prints "NA" for missing fields; those become empty strings. If YouTube Music
+# structured metadata (track + artist) is present it's used as-is; otherwise a
+# heuristic "Artist - Title" split is attempted, falling back to the uploader as
+# artist. The artist and title are run through clean_meta().
+
+
+class TrackMeta:
+    """Structured metadata for a single track, as parsed from yt-dlp output."""
+
+    __slots__ = ("id", "artist", "title", "album", "year", "track_no")
+
+    def __init__(
+        self,
+        id: str,
+        artist: str,
+        title: str,
+        album: str = "",
+        year: str = "",
+        track_no: str = "",
+    ) -> None:
+        self.id = id
+        self.artist = artist
+        self.title = title
+        self.album = album
+        self.year = year
+        self.track_no = track_no
+
+
+def _NA(value: str) -> str:
+    """yt-dlp prints 'NA' for missing fields; treat as empty."""
+    return "" if value == "NA" else value
+
+
+def parse_meta(block: str) -> TrackMeta | None:
+    """Parse a yt-dlp 8-line metadata block into a TrackMeta, or None if no id.
+
+    Reads only the first 8 lines so a retry that appends a second copy is safe.
+    """
+    lines = block.splitlines()
+    if len(lines) < 1 or not lines[0]:
+        return None
+    # Pad to 8 fields so IndexError can never happen.
+    padded = (lines + [""] * 8)[:8]
+    id_ = padded[0]
+    raw_title = padded[1]
+    raw_uploader = padded[2]
+    m_track = _NA(padded[3])
+    m_artist = _NA(padded[4])
+    m_album = _NA(padded[5])
+    m_year = _NA(padded[6])
+    m_trackno = _NA(padded[7])
+
+    if m_track and m_artist:
+        # Structured YouTube Music metadata — already clean.
+        artist = m_artist
+        title = m_track
+    elif " - " in raw_title:
+        artist, title = raw_title.split(" - ", 1)
+        artist = clean_meta(artist)
+        title = clean_meta(title)
+    else:
+        artist = clean_meta(raw_uploader)
+        title = clean_meta(raw_title)
+
+    # Title is never empty — fall back to the raw title.
+    if not title:
+        title = raw_title
+
+    return TrackMeta(
+        id=id_, artist=artist, title=title, album=m_album, year=m_year, track_no=m_trackno
+    )
