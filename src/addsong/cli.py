@@ -45,7 +45,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--playlist", action="store_true", help="treat the URL as a playlist")
     p.add_argument("--from", dest="from_file", metavar="FILE",
                    help="read URLs (one per line) from FILE, or - for stdin")
-    p.add_argument("--results", type=int, metavar="N",
+    p.add_argument("--results", metavar="N",
                    help="free-text YouTube search; import top N results (1-50)")
     p.add_argument("-y", "--yes", action="store_true", help="don't prompt; accept metadata")
     p.add_argument("--review", action="store_true", help="always prompt to review metadata")
@@ -76,6 +76,10 @@ def _validate_and_resolve(parser: argparse.ArgumentParser, ns) -> int:  # type: 
     """
     # --results range and integer checks (Bash rejects 0, non-int, >50).
     if ns.results is not None:
+        try:
+            ns.results = int(ns.results)
+        except ValueError:
+            parser.error(f"--results needs a positive integer (got: '{ns.results}')")
         if ns.results <= 0:
             parser.error(f"--results needs a positive integer (got: '{ns.results}')")
         if ns.results > 50:

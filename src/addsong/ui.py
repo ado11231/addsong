@@ -67,13 +67,16 @@ class UI:
         self.os_mode = os_mode
 
         colorsys = not (no_color or bool(os.environ.get("NO_COLOR")))
-        use_color = colorsys and have_tty
-        self.console = Console(stderr=True, no_color=not use_color, force_terminal=use_color)
+        # rich detects whether each output file is a real terminal itself;
+        # `have_tty` only gates whether we open /dev/tty for the spinner/progress.
+        # `no_color` disables our markup colors even at a TTY (the Bash parity).
+        no_color_flag = not colorsys or not have_tty
+        self.console = Console(stderr=True, no_color=no_color_flag)
         self.tty: Console | None = None
         if have_tty:
             tty_file = _open_tty()
             if tty_file is not None:
-                self.tty = Console(file=tty_file, no_color=not use_color, force_terminal=use_color)
+                self.tty = Console(file=tty_file, no_color=no_color_flag)
 
     # --- text output -------------------------------------------------------
 
@@ -84,9 +87,18 @@ class UI:
         )
 
     def say(self, msg: str) -> None:
-        """Info line to stderr, suppressed under --quiet."""
+        """Info line to stderr, suppressed under --quiet. Markup is escaped."""
         if not self.quiet:
             self.console.print(_escape(msg), highlight=False)
+
+    def say_markup(self, msg: str) -> None:
+        """Info line that carries rich markup (e.g. colored totals).
+
+        Used by finish_batch where the color tags are intentional; user-supplied
+        fragments in the message must already be escaped by the caller.
+        """
+        if not self.quiet:
+            self.console.print(msg, highlight=False)
 
     def banner(self, msg: str) -> None:
         """Cyan »-prefixed banner line, suppressed under --quiet."""
@@ -94,28 +106,35 @@ class UI:
             self.console.print(f"[cyan]»[/cyan] {_escape(msg)}", highlight=False)
 
     def status(self, keyword: str, rest: str) -> None:
-        """Aligned status line colored by keyword. Suppressed under --quiet."""
+        """Aligned status line colored by keyword. Suppressed under --quiet.
+
+        Icons only render when color is on (matching the Bash setup_colors
+        early-return that leaves I_ADDED empty without a TTY); without a TTY
+        the line is plain ``keyword`` + rest so scripted greps still match.
+        """
         if self.quiet:
             return
         key = keyword.lower()
         if key.startswith("added") or key.startswith("would add") or key.startswith("subscribed"):
-            color, icon = "bold green", "✓ "
+            color = "bold green"
         elif key.startswith("skipped") or key.startswith("already") or "subscribed" in key:
-            color, icon = "yellow", "• "
+            color = "yellow"
         elif key.startswith("failed"):
-            color, icon = "bold red", "✗ "
+            color = "bold red"
         else:
-            color, icon = "", ""
-        if color:
-            # Markup-aware wrap is only valid with a non-empty color tag.
+            color = ""
+        # Resolved-once icon lives inside the color branch (Bash leaves icons
+        # empty without a TTY), so when there's no color we emit keyword+rest
+        # plainly — that's what scripted greps lock onto.
+        if color and self.console.color_system is not None:
+            icon = {"bold green": "✓ ", "yellow": "• ", "bold red": "✗ "}[color]
             self.console.print(
                 f"  [{color}]{icon}{_escape(keyword):<8}[/{color}] {_escape(rest)}",
                 highlight=False,
             )
         else:
-            # No color: escape user-supplied text so markup chars never leak.
             self.console.print(
-                f"  {icon}{_escape(keyword):<8} {_escape(rest)}", highlight=False
+                f"  {_escape(keyword):<8} {_escape(rest)}", highlight=False
             )
 
     # --- summarize ---------------------------------------------------------
@@ -123,8 +142,8 @@ class UI:
     def finish_batch(self, verb: str, n_added: int, n_skipped: int, n_failed: int) -> None:
         """End-of-run summary line. Failures are red when nonzero."""
         fcolor = "bold red" if n_failed > 0 else "dim"
-        self.say(
-            f"Done. {verb} [bold green]{n_added}[/bold green], "
+        self.say_markup(
+            f"Done. {_escape(verb)} [bold green]{n_added}[/bold green], "
             f"skipped [yellow]{n_skipped}[/yellow], "
             f"failed [{fcolor}]{n_failed}[/{fcolor}]."
         )
