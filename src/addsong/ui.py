@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import IO
 
 from rich.console import Console
+from rich.markup import escape as _escape
 from rich.progress import (
     BarColumn,
     DownloadColumn,
@@ -78,17 +79,19 @@ class UI:
 
     def err(self, msg: str) -> None:
         """Error line to stderr with the program prefix."""
-        self.console.print(f"[bold red]{self.prog}:[/bold red] {msg}", highlight=False)
+        self.console.print(
+            f"[bold red]{self.prog}:[/bold red] {_escape(msg)}", highlight=False
+        )
 
     def say(self, msg: str) -> None:
         """Info line to stderr, suppressed under --quiet."""
         if not self.quiet:
-            self.console.print(msg, highlight=False)
+            self.console.print(_escape(msg), highlight=False)
 
     def banner(self, msg: str) -> None:
         """Cyan »-prefixed banner line, suppressed under --quiet."""
         if not self.quiet:
-            self.console.print(f"[cyan]»[/cyan] {msg}", highlight=False)
+            self.console.print(f"[cyan]»[/cyan] {_escape(msg)}", highlight=False)
 
     def status(self, keyword: str, rest: str) -> None:
         """Aligned status line colored by keyword. Suppressed under --quiet."""
@@ -103,7 +106,17 @@ class UI:
             color, icon = "bold red", "✗ "
         else:
             color, icon = "", ""
-        self.console.print(f"  [{color}]{icon}{keyword:<8}[/{color}] {rest}", highlight=False)
+        if color:
+            # Markup-aware wrap is only valid with a non-empty color tag.
+            self.console.print(
+                f"  [{color}]{icon}{_escape(keyword):<8}[/{color}] {_escape(rest)}",
+                highlight=False,
+            )
+        else:
+            # No color: escape user-supplied text so markup chars never leak.
+            self.console.print(
+                f"  {icon}{_escape(keyword):<8} {_escape(rest)}", highlight=False
+            )
 
     # --- summarize ---------------------------------------------------------
 
