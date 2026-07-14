@@ -1,0 +1,13 @@
+# Mark installer / packaging / completion shell scripts as vendored so
+# GitHub's language statistics reflect addsong's Python source rather than
+# the shell scripts that wrap install and tab-completion. These files are
+# real shell (install.sh runs before Python exists; PKGBUILD is an Arch
+# recipe; completions must be sourced by the shell), so they stay — they
+# just shouldn't skew the repo's language bar.
+
+install.sh          linguist-vendored
+install.ps1         linguist-vendored
+packaging/aur/PKGBUILD         linguist-vendored
+packaging/aur/.SRCINFO         linguist-vendored
+completions/addsong.bash       linguist-generated
+completions/_addsong           linguist-generated
