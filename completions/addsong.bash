@@ -19,7 +19,7 @@ _addsong() {
   case "$prev" in
     --format)
       # shellcheck disable=SC2207
-      COMPREPLY=( $(compgen -W "m4a mp3 flac opus wav aac" -- "$cur") )
+      COMPREPLY=( $(compgen -W "m4a mp3 flac opus vorbis wav aac alac best" -- "$cur") )
       return ;;
     --quality)
       # shellcheck disable=SC2207

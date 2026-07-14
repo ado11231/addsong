@@ -25,7 +25,7 @@ _addsong() {
     '--playlist[Treat the URL as a playlist and import every track]' \
     '--from[Read URLs from a file (- for stdin)]:file:_files' \
     '--results[Free-text YouTube search; import the top N results]:count' \
-    '--format[Output audio format]:format:(m4a mp3 flac opus wav aac)' \
+    '--format[Output audio format]:format:(m4a mp3 flac opus vorbis wav aac alac best)' \
     '--quality[Audio quality 0-10 (0=best)]:quality:(0 1 2 3 4 5 6 7 8 9 10)' \
     '(-y --yes)'{-y,--yes}'[Do not prompt; accept the scraped metadata as-is]' \
     '--review[Always prompt to review metadata]' \
