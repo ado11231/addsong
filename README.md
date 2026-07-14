@@ -6,30 +6,30 @@
 
 <p align="center"><b>Paste a link, and the song shows up in Apple Music automatically.</b></p>
 
-`addsong` a song name or a YouTube link. It downloads the track, adds the
+`addsong` takes a song name or a YouTube link. It downloads the track, adds the
 **title, artist, and cover art**, and drops it into Apple Music. No dragging
-files around making downloading unofficial music seamless.
+files around — making downloading unofficial music seamless.
 
 ```bash
-addsong "songname"                      
-addsong "https://www.youtube.com/watch?v=..." 
+addsong "songname"
+addsong "https://www.youtube.com/watch?v=..."
 ```
 
 ## Installation
 
-### macOS&nbsp;<img src="assets/macos.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
+### macOS&nbsp;<img src="assets/macos.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
 
 ```bash
 brew install ado11231/tap/addsong
 ```
 
-### Linux&nbsp;<img src="assets/linux.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
+### Linux&nbsp;<img src="assets/linux.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
 
 ```bash
 curl -fsSL https://ado11231.github.io/addsong/install.sh | bash
 ```
 
-### Windows&nbsp;<img src="assets/windows.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
+### Windows&nbsp;<img src="assets/windows.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
 
 Paste it into **PowerShell**. When it finishes, open a new terminal and run
 `addsong` from anywhere — PowerShell, CMD, or any shell:
@@ -43,6 +43,12 @@ Check version to see if installation worked.
 ```bash
 addsong --version
 ```
+
+## Updating
+
+Re-run the install one-liner above to upgrade to the latest `main`. To pin a
+specific version, set `ADDSONG_REF` before running the installer, e.g.
+`ADDSONG_REF=v1.0.0`. Homebrew users get updates via `brew upgrade`.
 
 ## Your First Song
 
@@ -81,7 +87,6 @@ Press **Enter** and the song lands in Apple Music a second later.
 
 
 
-
 ## Flags
 
 
@@ -98,9 +103,9 @@ Press **Enter** and the song lands in Apple Music a second later.
 | `--help`                | Full list of commands and options                      |
 
 
-Set environment variables like `ADDSONG_WATCH_DIR` for permenant defaults.
+Set environment variables like `ADDSONG_WATCH_DIR` for permanent defaults.
 
-run `addsong --help` for the full list.
+Run `addsong --help` for the full list.
 
 ## Download Location
 
@@ -109,7 +114,6 @@ On macOS and Windows they go straight into Apple Music; on Linux they land in
 
 ## Common Errors
 
-- `command not found` — reopen your terminal; if it persists, re-run [Install](#install).
+- `command not found` — reopen your terminal; if it persists, re-run the [Installation](#installation) step.
 - **Nothing shows up** — open the Apple Music app and keep it open while adding (macOS/Windows).
 - **A download failed** — update `yt-dlp`, then retry with `--verbose` to see why.
-

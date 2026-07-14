@@ -1,27 +1,23 @@
 #!/usr/bin/env bash
-# One command installer for addsong on Linux, WSL, Git Bash, and macOS as fallback.
-# Installs yt-dlp and ffmpeg then puts addsong on your PATH.
+# One command installer for addsong on Linux, WSL, Git Bash, and macOS.
+#
+# Installs yt-dlp and ffmpeg (if missing), then installs the addsong Python
+# package via pipx (preferred) or pip --user, which puts the `addsong`
+# console-script on your PATH.
 #
 # Usage
 #   curl -fsSL https://ado11231.github.io/addsong/install.sh | bash
 #
-# macOS users should prefer brew install ado11231/tap/addsong
+# macOS users can also use: brew install ado11231/tap/addsong
 #
 # Honors NO_COLOR (https://no-color.org/). Override the download ref with
 # ADDSONG_REF (defaults to main) and the install dir with ADDSONG_BIN_DIR.
 set -euo pipefail
 
-REPO="ado11231/addsong"
+REPO="ado11231/apple-music-pipeline"
 REF="${ADDSONG_REF:-main}"
-# Default install pulls from GitHub Pages. Pinning ADDSONG_REF to a tag or branch
-# uses the raw URL so you can install a specific version.
-if [[ "$REF" == "main" ]]; then
-  RAW_URL="https://ado11231.github.io/addsong/addsong"
-else
-  RAW_URL="https://raw.githubusercontent.com/$REPO/$REF/addsong"
-fi
 
-# Messaging TTY and NO_COLOR aware like addsong
+# Messaging TTY and NO_COLOR aware like addsong.
 C_INFO=""; C_OK=""; C_WARN=""; C_ERR=""; C_RESET=""
 if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
   C_INFO=$'\033[1m'; C_OK=$'\033[32m'; C_WARN=$'\033[33m'
@@ -32,7 +28,7 @@ ok()   { printf '  %s%s%s\n' "$C_OK"   "$*" "$C_RESET" >&2; }
 warn() { printf '  %s%s%s\n' "$C_WARN" "$*" "$C_RESET" >&2; }
 die()  { printf '%sinstall:%s %s\n' "$C_ERR" "$C_RESET" "$*" >&2; exit 1; }
 
-# Platform detection mirrors addsong detect_os
+# Platform detection mirrors addsong.detect_os.
 detect_os() {
   case "${OSTYPE:-}" in
     darwin*)        echo mac ;;
@@ -80,7 +76,13 @@ command -v curl >/dev/null 2>&1 || die "curl is required to run this installer."
 OS="$(detect_os)"
 info "addsong installer  (platform: $OS)"
 
-# Dependencies
+# Python is required.
+if ! command -v python3 >/dev/null 2>&1; then
+  warn "python3 missing -- installing ..."
+  install_pkgs python3
+fi
+
+# Dependencies (the Python package's external binaries).
 info "Checking dependencies ..."
 missing=()
 for dep in yt-dlp ffmpeg; do
@@ -93,39 +95,27 @@ for dep in yt-dlp ffmpeg; do
 done
 [[ ${#missing[@]} -gt 0 ]] && install_pkgs "${missing[@]}"
 
-# Install the script
-# Prefer ~/.local/bin on PATH by default on modern distros, else ~/bin.
-if [[ -n "${ADDSONG_BIN_DIR:-}" ]]; then
-  BIN_DIR="$ADDSONG_BIN_DIR"
-elif [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
-  BIN_DIR="$HOME/.local/bin"
-elif [[ ":$PATH:" == *":$HOME/bin:"* ]]; then
-  BIN_DIR="$HOME/bin"
+# Install addsong from the source archive.
+ARCHIVE_URL="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
+info "Downloading addsong source ($REF) ..."
+TMPDIR_INSTALL="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_INSTALL"' EXIT
+curl -fsSL "$ARCHIVE_URL" -o "$TMPDIR_INSTALL/addsong.tar.gz" \
+  || die "download failed: $ARCHIVE_URL"
+mkdir -p "$TMPDIR_INSTALL/src"
+tar -xzf "$TMPDIR_INSTALL/addsong.tar.gz" -C "$TMPDIR_INSTALL/src" --strip-components=1 \
+  || die "extract failed"
+SRC_DIR="$TMPDIR_INSTALL/src"
+
+# Prefer pipx for an isolated, PATH-friendly install; fall back to pip --user.
+info "Installing addsong ..."
+if command -v pipx >/dev/null 2>&1; then
+  pipx install "$SRC_DIR" || die "pipx install failed"
 else
-  BIN_DIR="$HOME/.local/bin"
-fi
-mkdir -p "$BIN_DIR" || die "cannot create $BIN_DIR"
-
-info "Installing addsong -> $BIN_DIR/addsong"
-tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
-curl -fsSL "$RAW_URL" -o "$tmp" || die "download failed: $RAW_URL"
-grep -q '^VERSION=' "$tmp" || die "downloaded file does not look like addsong; aborting."
-install -m 0755 "$tmp" "$BIN_DIR/addsong"
-
-# PATH
-if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-  rc="$HOME/.bashrc"
-  [[ "${SHELL:-}" == *zsh* ]] && rc="$HOME/.zshrc"
-  line="export PATH=\"$BIN_DIR:\$PATH\""
-  marker="# added by addsong installer"
-  if ! grep -qF "$marker" "$rc" 2>/dev/null; then
-    printf '\n%s\n%s\n' "$marker" "$line" >> "$rc"
-    warn "Added $BIN_DIR to PATH in $rc"
-  fi
-  warn "Open a new terminal (or run: source \"$rc\") so 'addsong' is found."
+  python3 -m pip install --user --upgrade "$SRC_DIR" \
+    || die "pip install failed (try: pipx install addsong)"
 fi
 
 # Verify
-ok "Installed: $("$BIN_DIR/addsong" --version 2>/dev/null || echo addsong)"
+ok "Installed: $(addsong --version 2>/dev/null || echo addsong)"
 info "Done. Try:  addsong \"songname\""

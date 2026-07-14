@@ -20,13 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install yt-dlp and ffmpeg
+      - name: Install yt-dlp, ffmpeg, and addsong
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
+          python3 -m pip install --upgrade pip
           python3 -m pip install --upgrade yt-dlp
+          python3 -m pip install -e .
           yt-dlp --version
           ffmpeg -version | head -n1
+          addsong --version
 
       - name: Import one track end to end
         env:
@@ -36,7 +39,7 @@ jobs:
           URL: ${{ github.event.inputs.url }}
         run: |
           mkdir -p "$ADDSONG_WATCH_DIR"
-          ./addsong -y --no-progress --no-color "$URL"
+          addsong -y --no-progress --no-color "$URL"
           echo "--- output folder ---"
           ls -l "$ADDSONG_WATCH_DIR"
           # Fail the job if nothing was produced.

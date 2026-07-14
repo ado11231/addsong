@@ -15,16 +15,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install shellcheck and bats (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y shellcheck bats
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-      - name: Install shellcheck and bats (macOS)
-        if: runner.os == 'macOS'
-        run: brew install shellcheck bats-core
+      - name: Install addsong + dev tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install ruff mypy pytest
 
-      - name: Lint with shellcheck
-        run: shellcheck addsong install.sh
+      - name: Lint with ruff
+        run: ruff check .
 
-      - name: Run bats tests
-        run: bats test/
+      - name: Typecheck with mypy
+        run: mypy src/addsong
+
+      - name: Run pytest tests
+        run: pytest -q
