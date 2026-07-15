@@ -10,6 +10,7 @@ on-disk ledger format.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -118,7 +119,9 @@ def finalize_track(
     if os.path.exists(dest):
         dest = os.path.join(watch_dir, f"{base} ({int(time.time())}).{audio_format}")
     try:
-        os.replace(final, dest)
+        # shutil.move handles cross-device moves (EXDEV) by falling back to
+        # copy+delete; os.replace would fail across mounts (e.g. /tmp -> /home).
+        shutil.move(final, dest)
     except OSError:
         on_err(f"could not move into watch folder (permission?): {artist} - {title}")
         return 1

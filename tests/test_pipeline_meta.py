@@ -187,3 +187,45 @@ def test_finalize_track_collision_safe_naming(
     files = sorted(os.listdir(str(watch)))
     assert "Artist - Title.m4a" in files
     assert any(f.startswith("Artist - Title (") and f.endswith(".m4a") for f in files)
+
+
+def test_finalize_track_cross_device_move_falls_back_to_copy(
+    ff_stub_path: str, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: os.replace fails with EXDEV across mounts (e.g. /tmp -> /home).
+
+    Simulate the cross-device error path by forcing os.rename (which
+    shutil.move calls internally) to raise EXDEV once, and assert that the
+    copy-fallback still lands the tagged file in the watch folder.
+    """
+    import errno
+
+    _make_ffmpeg(ff_stub_path, 'out="${@: -1}"; printf "tagged" > "$out"; exit 0')
+    staging = tmp_path / "stage"
+    staging.mkdir()
+    (staging / "VID000.m4a").write_bytes(b"audio")
+    watch = tmp_path / "watch"
+    watch.mkdir()
+
+    real_rename = os.rename
+
+    def fail_exdev_once(src: str, dst: str) -> None:
+        # Raise EXDEV to force the shutil.move copy+delete fallback.
+        raise OSError(errno.EXDEV, "Invalid cross-device link", src, dst)
+
+    monkeypatch.setattr(os, "rename", fail_exdev_once)
+    errs: list[str] = []
+    rc = finalize_track(
+        str(staging), "VID000", "Artist", "Title", "", "", "",
+        watch_dir=str(watch), audio_format="m4a", verbose=False,
+        on_status=lambda k, r: None,
+        on_notify=lambda t, b: None,
+        on_add=lambda i, a, t: None,
+        on_err=lambda m: errs.append(m),
+    )
+    monkeypatch.setattr(os, "rename", real_rename)
+
+    assert rc == 0, f"expected success via copy fallback, got errs={errs}"
+    assert errs == []
+    assert os.path.isfile(str(watch / "Artist - Title.m4a"))
+    assert os.path.getsize(str(watch / "Artist - Title.m4a")) > 0
