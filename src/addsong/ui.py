@@ -26,7 +26,6 @@ from rich.progress import (
     DownloadColumn,
     Progress,
     TextColumn,
-    TimeRemainingColumn,
 )
 
 
@@ -260,7 +259,6 @@ class UI:
             BarColumn(),
             TextColumn("{task.percentage:>5.1f}%"),
             DownloadColumn(),
-            TimeRemainingColumn(),
             console=self.tty,
             transient=True,
         )

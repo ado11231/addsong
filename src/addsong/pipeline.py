@@ -91,6 +91,7 @@ def _staged_ytdlp_args(staging: str, audio_format: str, audio_quality: str) -> l
     """Shared yt-dlp download args (used by both fast and slow paths)."""
     return [
         "--no-playlist", "--retries", "3", "--fragment-retries", "3", "--socket-timeout", "30",
+        "--newline",
         "--extract-audio", "--audio-format", audio_format, "--audio-quality", audio_quality,
         "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "-o", os.path.join(staging, "%(id)s.%(ext)s"),
