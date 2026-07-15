@@ -31,9 +31,9 @@ addsong = "addsong.cli:main"
 path = "src/addsong/__init__.py"
 
 [project.urls]
-Homepage = "https://github.com/ado11231/apple-music-pipeline"
-Source = "https://github.com/ado11231/apple-music-pipeline"
-Issues = "https://github.com/ado11231/apple-music-pipeline/issues"
+Homepage = "https://github.com/ado11231/addsong"
+Source = "https://github.com/ado11231/addsong"
+Issues = "https://github.com/ado11231/addsong/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/addsong"]
