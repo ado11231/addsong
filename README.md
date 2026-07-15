@@ -1,6 +1,14 @@
 <h3 align="center">addsong</h3>
 
 <p align="center">
+  <a href="https://pypi.org/project/addsong/"><img src="https://img.shields.io/pypi/v/addsong?label=PyPI&logo=pypi&logoColor=white" alt="PyPI version"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/pypi/pyversions/addsong?label=Python&logo=python&logoColor=white" alt="Python versions"></a>
+  <a href="https://github.com/ado11231/addsong/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/addsong?label=License&logo=gnu&logoColor=white" alt="License"></a>
+  <a href="https://github.com/yt-dlp/yt-dlp"><img src="https://img.shields.io/badge/Powered%20by-yt--dlp-FF0000?logo=youtube" alt="Powered by yt-dlp"></a>
+  <a href="https://ffmpeg.org/"><img src="https://img.shields.io/badge/Tagged%20with-ffmpeg-007808?logo=ffmpeg&logoColor=white" alt="Tagged with ffmpeg"></a>
+</p>
+
+<p align="center">
   <img src="assets/demo.gif" alt="addsong demo" width="600">
 </p>
 
