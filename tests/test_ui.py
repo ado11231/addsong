@@ -97,3 +97,26 @@ def test_on_retry_message(capsys: pytest.CaptureFixture[str]) -> None:
     _, err = capsys.readouterr()
     assert "retrying (1/2)" in err
     assert "3s" in err
+
+
+def test_finish_batch_prints_headline_then_counts_on_separate_lines(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # No TTY -> plain text, no color/icons, but headline and counts split across lines.
+    ui = UI(prog="addsong", have_tty=False, quiet=False)
+    ui.finish_batch("Added", 2, 0, 0)
+    _, err = capsys.readouterr()
+    lines = [ln for ln in err.splitlines() if ln]
+    assert lines[0] == "Done."
+    assert "Added 2" in lines[1]
+    assert "skipped 0" in lines[1]
+    assert "failed 0" in lines[1]
+
+
+def test_finish_batch_all_failed_headline_is_failed(capsys: pytest.CaptureFixture[str]) -> None:
+    ui = UI(prog="addsong", have_tty=False, quiet=False)
+    ui.finish_batch("Added", 0, 0, 1)
+    _, err = capsys.readouterr()
+    lines = [ln for ln in err.splitlines() if ln]
+    assert lines[0] == "Failed."
+    assert "failed 1" in lines[1]

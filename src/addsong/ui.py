@@ -138,10 +138,23 @@ class UI:
     # --- summarize ---------------------------------------------------------
 
     def finish_batch(self, verb: str, n_added: int, n_skipped: int, n_failed: int) -> None:
-        """End-of-run summary line. Failures are red when nonzero."""
+        """End-of-run summary as two lines.
+
+        Line 1 is a check or x with "Done." (no failures) or "Failed." (one or
+        more). Line 2 is the added/skipped/failed counts, colored per tally.
+        Non-TTY output stays plain-text greppable (just "Done." or "Failed.").
+        """
+        all_failed = (n_added == 0 and n_skipped == 0 and n_failed > 0)
+        headline = "Failed." if all_failed else "Done."
+        if self.console.color_system is None:
+            self.say(headline)
+        else:
+            icon = "✗" if all_failed else "✓"
+            mark = "bold red" if all_failed else "bold green"
+            self.say_markup(f"[{mark}]{icon}[/{mark}] {_escape(headline)}")
         fcolor = "bold red" if n_failed > 0 else "dim"
         self.say_markup(
-            f"Done. {_escape(verb)} [bold green]{n_added}[/bold green], "
+            f"{_escape(verb)} [bold green]{n_added}[/bold green], "
             f"skipped [yellow]{n_skipped}[/yellow], "
             f"failed [{fcolor}]{n_failed}[/{fcolor}]."
         )
