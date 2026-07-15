@@ -36,3 +36,32 @@ jobs:
 
       - name: Run pytest tests
         run: pytest -q
+
+  build-and-install:
+    # Build the wheel exactly as release.yml does and install it in a clean
+    # pipx environment, so a packaging regression (missing module, broken
+    # console-script, version metadata) is caught before tag + publish.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build + install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade build pipx
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - name: pipx-install the built wheel
+        run: pipx install --force dist/*.whl
+
+      - name: console-script runs and --version works
+        run: |
+          addsong --version
+          addsong --print-completion bash | head -n1
