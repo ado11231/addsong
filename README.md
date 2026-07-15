@@ -17,38 +17,74 @@ addsong "https://www.youtube.com/watch?v=..."
 
 ## Installation
 
-### macOS&nbsp;<img src="assets/macos.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
+`addsong` is a Python package — install it with `pipx` (recommended) or `pip`.
+You also need two external binaries, **`yt-dlp`** and **`ffmpeg`**, on your PATH.
+
+### 1. Install addsong
 
 ```bash
-brew install ado11231/tap/addsong
+pipx install addsong
 ```
 
-### Linux&nbsp;<img src="assets/linux.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
+If you don't have `pipx`, install it first: macOS `brew install pipx`,
+Linux `pip install --user pipx` (or your distro's package), Windows
+`pip install pipx`. No `pipx`? `pip install --user addsong` works too — just
+make sure your user `bin` directory is on PATH.
+
+### 2. Install yt-dlp and ffmpeg
+
+These do the actual downloading and tagging. Pick one per OS:
+
+&nbsp;<img src="assets/macos.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> **macOS**
 
 ```bash
-curl -fsSL https://ado11231.github.io/addsong/install.sh | bash
+brew install yt-dlp ffmpeg
 ```
 
-### Windows&nbsp;<img src="assets/windows.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> 
+&nbsp;<img src="assets/linux.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> **Linux / WSL**
 
-Paste it into **PowerShell**. When it finishes, open a new terminal and run
-`addsong` from anywhere — PowerShell, CMD, or any shell:
+```bash
+sudo apt-get install -y ffmpeg && pipx install yt-dlp
+# (or your distro's package manager; yt-dlp can also come from pipx/pip)
+```
+
+&nbsp;<img src="assets/windows.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> **Windows** (PowerShell)
 
 ```powershell
-irm https://ado11231.github.io/addsong/install.ps1 | iex
+winget install yt-dlp.yt-dlp Gyan.FFmpeg
 ```
 
-Check version to see if installation worked.
+### 3. Check it
 
 ```bash
 addsong --version
 ```
 
+> **No wheels for your platform?** `addsong` is pure Python, so `pipx install
+> addsong` works on any OS with Python 3.11+. The external binaries (`yt-dlp`,
+> `ffmpeg`) are the only platform-specific bits.
+
 ## Updating
 
-Re-run the install one-liner above to upgrade to the latest `main`. To pin a
-specific version, set `ADDSONG_REF` before running the installer, e.g.
-`ADDSONG_REF=v1.0.0`. Homebrew users get updates via `brew upgrade`.
+```bash
+pipx upgrade addsong
+# or, with pip:
+python -m pip install --user --upgrade addsong
+```
+
+## Shell Completions
+
+Generate tab-completion for your shell and source it (or save it to your shell's
+completion directory):
+
+```bash
+source <(addsong --print-completion bash)      # bash
+addsong --print-completion zsh  > ~/.zsh/completions/_addsong   # zsh
+addsong --print-completion fish > ~/.config/fish/completions/addsong.fish  # fish
+```
+
+Run `addsong --help` to confirm the flag, and see your shell's docs for where to
+drop completion files.
 
 ## Your First Song
 
@@ -114,6 +150,6 @@ On macOS and Windows they go straight into Apple Music; on Linux they land in
 
 ## Common Errors
 
-- `command not found` — reopen your terminal; if it persists, re-run the [Installation](#installation) step.
+- `command not found` — reopen your terminal so your PATH picks up the new install; if it persists, run `pipx ensurepath` and reopen, or check the [Installation](#installation) step.
 - **Nothing shows up** — open the Apple Music app and keep it open while adding (macOS/Windows).
 - **A download failed** — update `yt-dlp`, then retry with `--verbose` to see why.
