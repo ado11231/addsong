@@ -31,10 +31,11 @@ default per OS, and `ADDSONG_WATCH_DIR` always overrides it.
 | `ffmpeg.py`           | `finalize_track()` re-tag with `-c copy`, collision-safe move into the watch folder; ledger/status/notify/callbacks via injected callables. |
 | `ledger.py`           | TSV dedup ledger (has/add/clear/count/read_rows).          |
 | `subscriptions.py`    | Subscriptions file (add/remove/read_urls/has_subscriptions). |
-| `ui.py`              | `rich`-backed console: err/say/banner/status, spinner, progress bar, finish_batch summary, desktop notify. Colors honor `--no-color`/`NO_COLOR`/no-TTY; icons render only when `Console.color_system` is non-None (parity with the original Bash `setup_colors` no-TTY early-out). |
+| `ui.py`              | `rich`-backed console: err/say/banner/status, spinner, progress bar, finish_batch summary, desktop notify. Colors honor `--no-color`/`NO_COLOR`/no-TTY; icons render only when `Console.color_system` is non-None so non-TTY output stays plain-text greppable. |
 | `review.py`           | Interactive accept/edit/skip `review_meta()` + `confirm_forget()` over `/dev/tty`. |
 | `pipeline.py`        | `Run`/`Flags`, `process_one` (slow/fast paths), `interactive_for`, `run_url_stream`, `builtin_search/playlist/from_file/sync/forget`, `finish_batch`, `preflight`. |
-| `cli.py`             | `argparse` parser, subcommand peek, mutual-exclusivity rules, exit-code dispatch. |
+| `completion.py`       | Shell-completion script generation for `--print-completion bash/zsh/fish`; flags/subcommands declared once and rendered per shell. |
+| `cli.py`             | `argparse` parser, subcommand peek, mutual-exclusivity rules, `--print-completion`, exit-code dispatch. |
 
 ## The Pipeline (Per Track)
 
@@ -103,5 +104,5 @@ the prompt).
 - **Staging:** each download uses a `tempfile.mkdtemp()` directory that is
   removed whether the track succeeds or fails.
 - **Output:** exactly one tagged audio file moved into `ADDSONG_WATCH_DIR` per
-  successful track. On-disk state files use the same format as the original
-  Bash version, so existing ledgers and subscription lists survive an upgrade.
+  successful track. On-disk state-file formats are stable across releases, so
+  existing ledgers and subscription lists survive an upgrade.
