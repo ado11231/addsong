@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "addsong"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Download a song from a URL or YouTube search and auto-import it into Apple Music."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -26,6 +26,9 @@ dependencies = ["rich>=13.0"]
 
 [project.scripts]
 addsong = "addsong.cli:main"
+
+[tool.hatch.version]
+path = "src/addsong/__init__.py"
 
 [project.urls]
 Homepage = "https://github.com/ado11231/apple-music-pipeline"
