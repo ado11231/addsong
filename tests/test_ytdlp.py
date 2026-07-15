@@ -1,8 +1,8 @@
-"""Parity tests for run_ytdlp retry/hard-error classification.
+"""Tests for run_ytdlp retry/hard-error classification.
 
-Ports the bats make_ytdlp pattern: a fake yt-dlp on PATH with a counter file
-that records how many times it ran, controlled to fail transiently or with a
-hard error. Retries/delay are set tiny for speed.
+A fake yt-dlp is placed on PATH with a counter file that records how many
+times it ran, controlled to fail transiently or with a hard error. Retries/
+delay are set tiny for speed.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from addsong.ytdlp import run_ytdlp
 
 
 def _make_ytdlp(bin_dir: str, body: str) -> str:
-    """Install a fake yt-dlp in bin_dir with the given bash body. Returns counter path."""
+    """Install a fake yt-dlp in bin_dir with the given stub body. Returns counter path."""
     counter = os.path.join(bin_dir, "n")
     with open(counter, "w") as fh:
         fh.write("0")

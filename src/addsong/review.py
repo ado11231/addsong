@@ -1,9 +1,9 @@
 """Interactive metadata review over /dev/tty.
 
-Ports the Bash `review_meta()`. Shows the scraped artist/title and lets the user
-accept (Enter), edit (E), or skip (S). Only invoked when the run is interactive
-(see ui/constant flags); /dev/tty is opened fresh for read+write so it works
-mid-pipeline regardless of stdin.
+Shows the scraped artist/title and lets the user accept (Enter), edit (E), or
+skip (S). Only invoked when the run is interactive (see ui/constant flags);
+/dev/tty is opened fresh for read+write so it works mid-pipeline regardless of
+stdin.
 
 Returns (artist, title) on accept, or None on skip.
 """
@@ -36,7 +36,7 @@ def review_meta(artist: str, title: str, *, prog: str = "addsong") -> tuple[str,
     try:
         while True:
             tty.write("\n")
-            tty.write("  Review track \u266a\n")          # bold header in Bash
+            tty.write("  Review track \u266a\n")          # bold header
             tty.write(f"  Artist: {cur_artist}\n")
             tty.write(f"  Title:  {cur_title}\n")
             tty.write("\n")
@@ -46,7 +46,7 @@ def review_meta(artist: str, title: str, *, prog: str = "addsong") -> tuple[str,
             ans = tty.readline().strip()
 
             if ans in ("", "y", "Y"):
-                # step up and clear for the result line, mirroring Bash
+                # step up and clear for the result line
                 tty.write("\033[A\033[2K\r")
                 tty.flush()
                 return cur_artist, cur_title
@@ -80,7 +80,7 @@ def confirm_forget(count: int) -> bool:
     """Prompt at /dev/tty to confirm forgetting ``count`` imported tracks.
 
     Returns True on yes, False on cancel. Raises RuntimeError when there's no
-    controlling terminal — matching the Bash refusal to forget without a TTY.
+    controlling terminal — addsong refuses to forget without confirmation.
     """
     tty = _open_tty_rw()
     if tty is None:

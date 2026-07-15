@@ -1,8 +1,7 @@
-"""CLI parity tests ported from the bats suite.
+"""CLI tests.
 
 These run the full addsong CLI (addsong.cli.main) under the shared `stubs`
-fixture (fake yt-dlp + ffmpeg on PATH, isolated watch/ledger/subs). Each test
-maps to one or more bats @test cases so pytest coverage matches.
+fixture (fake yt-dlp + ffmpeg on PATH, isolated watch/ledger/subs).
 """
 
 from __future__ import annotations

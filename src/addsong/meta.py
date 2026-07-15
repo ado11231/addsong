@@ -1,8 +1,8 @@
 """Metadata string helpers: filename-safe names, URL id parsing, and title scrubbing.
 
-`clean_meta()` ports the Bash `perl -CSD -pe '...'` filter to Python `re`, with
-an explicit loop for the "strip bracketed junk until none left" behaviour that
-Perl expressed as `1 while s/...//gix`.
+`clean_meta()` strips junk like `(Official Video)`, `[4K]`, and `(feat. X)`
+from titles. The bracketed-junk pattern repeats until no inner junk is left,
+so nested cases collapse fully.
 """
 
 from __future__ import annotations
@@ -14,11 +14,10 @@ _YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 # --- clean_meta ---------------------------------------------------------------
 #
-# The patterns below are a line-by-line port of the Perl one-liner in the Bash
-# script. Perl used /gix (global, ignorecase, extended-whitespace); Python
-# compiles each as a standalone pattern with re.IGNORECASE and re.sub handles
-# the global pass. The bracketed-junk pattern needs an outer loop (Perl's
-# `1 while s/.../`) for nested cases, so _clean_bracketed repeats until stable.
+# Patterns are compiled once with re.IGNORECASE (matching /i in the original
+# expression) and re.sub does the global pass (matching /g). The bracketed-junk
+# pattern needs an outer loop for nested cases, so _clean_bracketed repeats
+# until stable.
 
 # Bracketed junk: (Official Video), [4K], (Lyrics), (Audio), [MV], (Remastered 2014), etc.
 _BRACKET_JUNK = re.compile(
@@ -67,7 +66,7 @@ _MULTI_WS = re.compile(r"\s{2,}")
 
 
 def _clean_bracketed(s: str) -> str:
-    """Repeatedly strip bracketed junk until no more matches (Perl `1 while s/`)."""
+    """Repeatedly strip bracketed junk until no more matches remain."""
     prev: str | None = None
     while prev != s:
         prev = s
@@ -80,7 +79,6 @@ def clean_meta(value: str) -> str:
 
     Drops official-video/lyrics/4K/remaster brackets, feat. blocks, the trailing
     "- Topic" suffix, leading/trailing separators, and collapses whitespace.
-    Mirrors the Bash `clean_meta()` Perl filter exactly.
     """
     s = _clean_bracketed(value)
     s = _FEAT_BLOCK.sub("", s)
@@ -94,7 +92,7 @@ def clean_meta(value: str) -> str:
 def safe_name(s: str) -> str:
     """Make a string safe as a filename: no path separators or colons.
 
-    Mirrors the Bash `safe_name()`: slash, colon, and backslash become `_`.
+    Slash, colon, and backslash become `_`.
     """
     return s.replace("/", "_").replace(":", "_").replace("\\", "_")
 

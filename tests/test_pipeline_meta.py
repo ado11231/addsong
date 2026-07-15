@@ -1,8 +1,8 @@
 """Tests for parse_meta (yt-dlp metadata-block parsing) and finalize_track.
 
-parse_meta ports the Bash function that reads an 8-line --print block. The
-heuristic split "Artist - Title" and clean_meta integration are covered, plus
-the NA->empty normalization and the empty-title fallback.
+parse_meta reads an 8-line --print block. The heuristic split "Artist - Title"
+and clean_meta integration are covered, plus the NA->empty normalization and
+the empty-title fallback.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def test_parse_meta_title_never_empty_falls_back_to_raw() -> None:
 
 
 def _make_ffmpeg(bin_dir: str, body: str) -> None:
-    """Install a fake ffmpeg with the given bash body."""
+    """Install a fake ffmpeg with the given stub body."""
     script = os.path.join(bin_dir, "ffmpeg")
     with open(script, "w") as fh:
         fh.write("#!/usr/bin/env bash\n")

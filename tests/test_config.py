@@ -1,8 +1,7 @@
-"""Parity tests for config-file parsing, ported from the bats suite.
+"""Tests for config-file parsing.
 
-The Bash tests sourced the script with ADDSONG_CONFIG pointing at a tmp file
-and asserted the exported variables. Here we set ADDSONG_CONFIG and other env
-vars in the process, call load_config(), and assert the resolved Config.
+We set ADDSONG_CONFIG and other env vars in the process, call load_config(),
+and assert the resolved Config.
 """
 
 from __future__ import annotations

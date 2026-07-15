@@ -1,9 +1,8 @@
-"""Parity tests for the subscriptions layer.
+"""Tests for the subscriptions layer.
 
-Ports the bats subscription-file behaviour: subscribe appends, rejects non-URLs,
-dedupes by exact line; unsubscribe removes and is idempotent; list skips blanks
-and `#` comments and prints a hint when empty; the empty-file detection that
-powers sync's early exit.
+subscribe appends, rejects non-URLs, and dedupes by exact line; unsubscribe
+removes and is idempotent; list skips blanks and `#` comments and prints a
+hint when empty; plus the empty-file detection that powers sync's early exit.
 """
 
 from __future__ import annotations

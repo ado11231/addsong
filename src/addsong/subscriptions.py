@@ -1,9 +1,8 @@
 """Subscribed-playlist file: one URL per line with `#` comments and blanks.
 
-On-disk format is preserved from the Bash script. add/remove are idempotent;
-list skips comments and blank lines. sync expands each URL via yt-dlp's flat
-playlist extraction and is orchestrated by the pipeline (cli.py) which calls
-`read_urls` to get the subscription list.
+add/remove are idempotent; list skips comments and blank lines. sync expands
+each URL via yt-dlp's flat playlist extraction and is orchestrated by the
+pipeline (cli.py) which calls `read_urls` to get the subscription list.
 """
 
 from __future__ import annotations

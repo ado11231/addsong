@@ -1,9 +1,8 @@
-"""Parity tests for platform helpers, ported from the bats suite.
+"""Tests for platform helpers.
 
-Note on OS mocking: the bats tests overrode `$OSTYPE` in a sourced subprocess.
-Here we monkeypatch sys.platform / os.environ directly. The detect_os tests
-that asserted darwin/msys/cygwin/hpunix map cleanly; WSL needs a procfs fixture
-covered separately when we have a Linux runner.
+OS mocking monkeypatches sys.platform / os.environ directly. The detect_os
+tests that asserted darwin/msys/cygwin/hpunix map cleanly; WSL needs a procfs
+fixture covered separately when we have a Linux runner.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from addsong.platform import default_watch_dir, detect_os
 
 
 def test_safe_name_replaces_slashes_colons_backslashes(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Pass input through env to mirror the bats backslash-quoting workaround.
+    # Pass input through env since the helper reads os.environ.
     monkeypatch.setenv("IN", r"AC/DC: Back\Black")
     assert safe_name(os.environ["IN"]) == r"AC_DC_ Back_Black"
 
@@ -64,7 +63,7 @@ def test_id_from_url_rejects_short_id() -> None:
 
 
 def test_id_from_url_known_id_in_url_skips_download() -> None:
-    # Mirrors the zero-network dedup bats test setup.
+    # Zero-network dedup setup.
     assert id_from_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
 
 

@@ -1,12 +1,12 @@
 """Console UI: colors, status lines, banners, spinner, progress bar, notify.
 
-All informational output (err/say/status/banner) is written to **stderr**,
-matching the Bash script so stdout stays clean for scripted use. Spinner and
-progress render to ``/dev/tty`` so they don't pollute piped output.
+All informational output (err/say/status/banner) is written to **stderr** so
+stdout stays clean for scripted use. Spinner and progress render to
+``/dev/tty`` so they don't pollute piped output.
 
 Color honors --no-color / NO_COLOR / no-TTY, falling back to plain text. The
 spinner is skipped (command runs synchronously with no animation) when there's
-no TTY or under --quiet/--verbose, matching the Bash `with_spinner` contract.
+no TTY or under --quiet/--verbose.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ class UI:
         colorsys = not (no_color or bool(os.environ.get("NO_COLOR")))
         # rich detects whether each output file is a real terminal itself;
         # `have_tty` only gates whether we open /dev/tty for the spinner/progress.
-        # `no_color` disables our markup colors even at a TTY (the Bash parity).
+        # `no_color` disables our markup colors even at a TTY.
         no_color_flag = not colorsys or not have_tty
         self.console = Console(stderr=True, no_color=no_color_flag)
         self.tty: Console | None = None
@@ -108,9 +108,8 @@ class UI:
     def status(self, keyword: str, rest: str) -> None:
         """Aligned status line colored by keyword. Suppressed under --quiet.
 
-        Icons only render when color is on (matching the Bash setup_colors
-        early-return that leaves I_ADDED empty without a TTY); without a TTY
-        the line is plain ``keyword`` + rest so scripted greps still match.
+        Icons only render when color is on; without a TTY the line is plain
+        ``keyword`` + rest so scripted greps still match.
         """
         if self.quiet:
             return
@@ -123,9 +122,8 @@ class UI:
             color = "bold red"
         else:
             color = ""
-        # Resolved-once icon lives inside the color branch (Bash leaves icons
-        # empty without a TTY), so when there's no color we emit keyword+rest
-        # plainly — that's what scripted greps lock onto.
+        # Resolved-once icon lives inside the color branch, so when there's no
+        # color we emit keyword+rest plainly — that's what scripted greps lock onto.
         if color and self.console.color_system is not None:
             icon = {"bold green": "✓ ", "yellow": "• ", "bold red": "✗ "}[color]
             self.console.print(
@@ -151,7 +149,7 @@ class UI:
     # --- retry -------------------------------------------------------------
 
     def on_retry(self, attempt: int, retries: int, delay: int) -> None:
-        """Transient-retry notice (mirrors the Bash `err` retry line)."""
+        """Transient-retry notice line."""
         self.err(f"transient error, retrying ({attempt}/{retries}) in {delay}s...")
 
     # --- spinner -----------------------------------------------------------
@@ -162,7 +160,7 @@ class UI:
         """Run fn() behind a spinner on /dev/tty; propagate its exit code.
 
         Without a TTY or under --quiet/--verbose, fn() runs synchronously with
-        no animation — matching the Bash `with_spinner` no-TTY contract.
+        no animation.
         """
         if not self.have_tty or self.quiet or self.verbose or self.tty is None:
             return fn()

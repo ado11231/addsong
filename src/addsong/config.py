@@ -1,8 +1,8 @@
 """Config and environment resolution.
 
 Loads KEY=VALUE defaults from the config file (parsed, not exec'd, so arbitrary
-code can't run — matching the Bash script's security stance), then lets real
-environment variables override them. Only ADDSONG_* keys are honored.
+code can't run), then lets real environment variables override them. Only
+ADDSONG_* keys are honored.
 
 Every other module reads resolved values from the `Config` dataclass returned
 by `load_config()` rather than touching os.environ directly, so tests can build
@@ -107,8 +107,7 @@ def _parse_config_file(path: str) -> dict[str, str]:
 def _get(file_values: dict[str, str], key: str, default: str = "") -> str:
     """Return env value if set, else file value, else default.
 
-    Environment variables override the config file, mirroring the Bash rule
-    `[[ -z "${!_k+set}" ]] && export "$_k=$_v"` which only exports a file value
+    Environment variables override the config file — a file value is only used
     when the env var was not already set.
     """
     if key in os.environ:

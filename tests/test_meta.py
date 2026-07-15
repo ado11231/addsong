@@ -1,8 +1,7 @@
-"""Parity tests for clean_meta, ported from the bats suite.
+"""Tests for clean_meta.
 
-The bats tests piped strings through the Perl one-liner; these call the Python
-clean_meta directly. Additional edge cases cover Unicode behaviour (en-dash,
-RTL, combining marks) that the parity port should preserve.
+Cover the core junk-stripping cases plus Unicode behaviour (en-dash, RTL,
+combining marks).
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from addsong.meta import clean_meta
 @pytest.mark.parametrize(
     ("inp", "expected"),
     [
-        # --- bats parity cases ---
+        # --- core junk-stripping cases ---
         ("Bohemian Rhapsody (Official Video)", "Bohemian Rhapsody"),
         ("Title [4K] (Lyrics)", "Title"),
         ("Song (feat. Someone)", "Song"),
@@ -74,6 +73,6 @@ def test_clean_meta_pipe_trailing_separator() -> None:
 
 
 def test_clean_meta_preserves_unicode() -> None:
-    # The Perl filter was Unicode-aware (-CSD); the Python port must not mangle
-    # non-ASCII letters in artist/title names.
+    # clean_meta is Unicode-aware and must not mangle non-ASCII letters in
+    # artist/title names.
     assert clean_meta("Sigur R\u00eds (Official Video)") == "Sigur R\u00eds"

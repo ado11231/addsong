@@ -1,8 +1,8 @@
 """Per-track and per-batch pipeline: dedup, download, finalize, summarize.
 
-Ports the Bash `process_one`, `interactive_for`, `run_url_stream`, `finish_batch`,
-and the `note_imported` Apple Music hint. The CLI builds a `Run` once (shared
-config, UI, ledger/subs paths, flags) and calls into these functions.
+The CLI builds a `Run` once (shared config, UI, ledger/subs paths, flags) and
+calls into these functions: `process_one`, `interactive_for`, `run_url_stream`,
+`finish_batch`, and `note_imported`.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from addsong.platform import default_watch_dir, detect_os
 from addsong.review import confirm_forget, review_meta
 from addsong.ui import UI
 
-# yt-dlp field order, matching the Bash --print / --print-to-file block.
+# yt-dlp field order for the --print / --print-to-file metadata block.
 _META_FIELDS = (
     "%(id)s", "%(title)s", "%(uploader)s",
     "%(track)s", "%(artist)s", "%(album)s",
@@ -34,8 +34,8 @@ _META_FIELDS = (
 class Flags:
     """Per-run boolean behaviour flags, after env + argv resolution.
 
-    CLI parsing (cli.py) builds this; the pipeline reads it. Defaults match the
-    Bash script's top-of-script zero-init.
+    CLI parsing (cli.py) builds this; the pipeline reads it. Defaults are all
+    false at the top of a run.
     """
 
     playlist: bool = False
@@ -69,7 +69,7 @@ class Run:
 def interactive_for(run: Run, playlist: bool) -> bool:
     """Whether to review a track interactively.
 
-    Mirrors the Bash `interactive_for`: dry-run never reviews; --yes forces off;
+    Dry-run never reviews; --yes forces off;
     --review forces on (only at a TTY); playlists default off; single track at a
     TTY defaults on.
     """
@@ -100,7 +100,7 @@ def _staged_ytdlp_args(staging: str, audio_format: str, audio_quality: str) -> l
 def process_one(run: Run, url: str, interactive: bool) -> int:
     """Process one track URL. Returns 0 added, 2 skipped, 1 failed.
 
-    Mirrors the Bash `process_one` pipeline: zero-network dedup via id_from_url,
+    The per-track pipeline: zero-network dedup via id_from_url,
     fast path (combined download+metadata) for non-interactive non-dry-run runs,
     slow path otherwise (metadata first for review or would-add line).
     """
@@ -230,7 +230,7 @@ def _finalize(run: Run, staging: str, tm: TrackMeta) -> int:
 def _fmt_to_extension(fmt: str) -> str:
     """Resolve an --format value to the on-disk extension it produces.
 
-    Fixes the Bash #14 bug (vorbis/alac/best extension mismatch): vorbis->.ogg,
+    Corrects the vorbis/alac/best extension mismatch: vorbis->.ogg,
     alac->.m4a, best-> resolved from yt-dlp's output via a glob. For 'best' the
     caller is finalize_track which locates the file by glob; we keep 'best' as
     the marker and let the glob path handle it.
@@ -285,7 +285,7 @@ def run_url_stream(
 ) -> None:
     """Process a stream of URLs one per line, updating run tallies.
 
-    Skips blank lines and `#` comments. Mirrors the Bash `run_url_stream`.
+    Skips blank lines and `#` comments.
     """
     for raw in lines:
         line = _strip(raw)
@@ -301,7 +301,7 @@ def run_url_stream(
 
 
 def expand_ids_to_urls(ids_text: str) -> list[str]:
-    """Turn a newline-separated id list into watch URLs (Bash sed equivalent)."""
+    """Turn a newline-separated id list into watch URLs."""
     return [
         f"https://www.youtube.com/watch?v={i}"
         for i in (_strip(ln) for ln in ids_text.splitlines())

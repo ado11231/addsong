@@ -1,9 +1,9 @@
 """yt-dlp subprocess wrapper with retry and hard-error classification.
 
-Ports the Bash `run_ytdlp()`: stdout is captured to a file (or streamed to a
-progress callback), stderr to a file, and transient failures retry with linear
-backoff. Permanent errors (private/unavailable/region-locked/etc., matched
-against `YTDLP_HARD_ERRORS`) return immediately without retrying.
+stdout is captured to a file (or streamed to a progress callback), stderr to a
+file, and transient failures retry with linear backoff. Permanent errors
+(private/unavailable/region-locked/etc., matched against
+`YTDLP_HARD_ERRORS`) return immediately without retrying.
 """
 
 from __future__ import annotations

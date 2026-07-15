@@ -1,10 +1,10 @@
 """CLI entry point: argparse, subcommands, mutual-exclusivity, exit codes.
 
-Preserves the exact Bash behaviour:
+Behaviour:
   - subcommands peeked before flags: subscribe/unsubscribe/list/sync/forget.
   - --from / --playlist / --results / a URL/search arg are mutually exclusive.
   - a bare non-URL argument defaults to --results 1 (a single YouTube search).
-  - `--` joins remaining bare words into the query (unquoted queries stay whole).
+  - unquoted bare words are joined into the query (no quoting needed).
   - exit codes 0 (added), 2 (skipped), 1 (failed); top-level 1 if anything failed.
   - --version / --help honored whether or not a subcommand was named.
 """
@@ -29,7 +29,7 @@ _SUBCOMMANDS = ("subscribe", "unsubscribe", "list", "sync", "forget")
 
 
 def _detect_have_tty() -> bool:
-    """True if a controlling terminal is openable right now (parity with Bash)."""
+    """True if a controlling terminal is openable right now."""
     return open_tty_available()
 
 
@@ -68,7 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Positional: the URL or free-text query. Bare words are joined by argparse
     # into a single string via nargs='*' so "queen bohemian rhapsody" stays whole
-    # without the user quoting it (mirrors the Bash URL+=<word>).
+    # without the user quoting it (bare words are joined into one query).
     p.add_argument("query", nargs="*", help="URL or free-text YouTube search")
     return p
 
@@ -79,7 +79,7 @@ def _validate_and_resolve(parser: argparse.ArgumentParser, ns) -> int:  # type: 
     Returns 0 on success or an exit code (already reported + raised via SystemExit).
     Raises SystemExit on error.
     """
-    # --results range and integer checks (Bash rejects 0, non-int, >50).
+    # --results range and integer checks (rejects 0, non-int, >50).
     if ns.results is not None:
         try:
             ns.results = int(ns.results)
@@ -144,8 +144,8 @@ def _die(msg: str) -> None:
 def _emit_help(parser: argparse.ArgumentParser) -> str:
     """Render the --help text, annotated with subcommands and examples.
 
-    argparse alone can't express the rich USAGE block the Bash script had; we
-    prepend a custom epilog so `addsong --help` stays useful.
+    argparse alone can't express the rich USAGE block; we prepend a custom
+    epilog so `addsong --help` stays useful.
     """
     return parser.format_help()
 

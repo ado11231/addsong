@@ -1,9 +1,7 @@
 """Platform detection and watch-folder path resolution.
 
-Ports the Bash `detect_os()` and `default_watch_dir()` functions. Detection
-reads `os.name` / `sys.platform` plus, on Linux, `/proc/sys/kernel/osrelease`
-for a WSL marker — mirroring the Bash script which read `$OSTYPE` and the same
-procfs file.
+Detection reads `os.name` / `sys.platform` plus, on Linux,
+`/proc/sys/kernel/osrelease` for a WSL marker.
 """
 
 from __future__ import annotations
@@ -21,12 +19,12 @@ _WSL_RE = re.compile(r"microsoft", re.IGNORECASE)
 def detect_os() -> OSMode:
     """Return one of mac/win/wsl/linux/other based on the current platform.
 
-    Equivalent to the Bash case on `$OSTYPE` plus the WSL procfs probe.
+    Uses `sys.platform` plus a WSL procfs probe on Linux.
     """
     if sys.platform == "darwin":
         return "mac"
     if os.name == "nt" or sys.platform in {"msys", "cygwin"}:
-        # Git Bash / MSYS / Cygwin path used by the Windows installer.
+        # Git Bash / MSYS / Cygwin on Windows.
         return "win"
     if sys.platform.startswith("linux"):
         try:

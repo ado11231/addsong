@@ -1,10 +1,10 @@
 """ffmpeg tagging + watch-folder move.
 
-Ports the Bash `finalize_track()`: re-tags the downloaded audio with
-`ffmpeg -c copy` (preserving embedded artwork), moves it into the watch folder
-with collision-safe naming, and emits the Added status + desktop notification via
-callbacks. Ledger writes are delegated to an ``on_add`` callback so this module
-stays decoupled from the on-disk ledger format.
+Re-tags the downloaded audio with `ffmpeg -c copy` (preserving embedded
+artwork), moves it into the watch folder with collision-safe naming, and emits
+the Added status + desktop notification via callbacks. Ledger writes are
+delegated to an ``on_add`` callback so this module stays decoupled from the
+on-disk ledger format.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def finalize_track(
     """Tag the staged file and move it into the watch folder.
 
     Returns 0 on success, 1 on failure. Failures are reported via ``on_err``
-    (matching the Bash script, which used `err()` not `status()`). On success,
+    (matching the historical `err()` convention). On success,
     calls ``on_add(id, artist, title)`` (ledger), ``on_status("Added",
     "artist - title")``, and ``on_notify(title, body)`` — in that order.
     """
@@ -123,7 +123,7 @@ def finalize_track(
         on_err(f"could not move into watch folder (permission?): {artist} - {title}")
         return 1
 
-    # Success: record ledger, print status, fire notification (Bash order).
+    # Success: record ledger, print status, fire notification — in that order.
     on_add(track_id, artist, title)
     on_status("Added", f"{artist} - {title}")
     on_notify("Added to Apple Music", f"{artist} - {title}")

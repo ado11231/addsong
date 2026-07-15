@@ -1,7 +1,7 @@
 """Import ledger: dedup TSV keyed by video id.
 
-On-disk format is preserved exactly from the Bash script so existing users'
-dedup ledgers survive the upgrade:
+The on-disk format is stable across releases so existing dedup ledgers keep
+working:
 
     id<TAB>artist<TAB>title<TAB>YYYY-MM-DDTHH:MM:SS
 

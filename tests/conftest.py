@@ -1,10 +1,10 @@
 """Pytest configuration: ensure src/ is importable without an editable install.
 
-Also hosts the shared `stubs` fixture and `run_cli` helper that mirror the bats
-`setup_stubs` pattern — fake yt-dlp + ffmpeg on PATH, isolated watch/ledger/subs
-in tmp_path, driven by STUB_META_FAIL / STUB_DL_FAIL / STUB_FF_FAIL / STUB_META
-knobs. Each test that needs the CLI imports these via conftest; pytest makes
-the `stubs` fixture available to any test in the tests/ tree.
+Also hosts the shared `stubs` fixture and `run_cli` helper: fake yt-dlp +
+ffmpeg on PATH, isolated watch/ledger/subs in tmp_path, driven by
+STUB_META_FAIL / STUB_DL_FAIL / STUB_FF_FAIL / STUB_META knobs. Each test that
+needs the CLI imports these via conftest; pytest makes the `stubs` fixture
+available to any test in the tests/ tree.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ def run_cli(*args: str) -> tuple[int, str, str]:
     """Invoke addsong.cli.main capturing stderr and stdout.
 
     Returns ``(rc, stderr_text, stdout_text)``. The `list` subcommand prints
-    to stdout; everything else is on stderr, matching the Bash script.
+    to stdout; everything else is on stderr.
     """
     err = io.StringIO()
     out = io.StringIO()

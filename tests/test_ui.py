@@ -1,8 +1,8 @@
 """Tests for the UI layer (spinner synchronous-no-TTY contract, quiet, notify).
 
-The bash `with_spinner` is the only directly-tested UI behaviour; the rich
-progress bar is exercised only to the extent that the no-tty and quiet paths
-fall back to synchronous execution (no animation, exit code propagated).
+`with_spinner` is the only directly-tested UI behaviour; the rich progress bar
+is exercised only to the extent that the no-tty and quiet paths fall back to
+synchronous execution (no animation, exit code propagated).
 """
 
 from __future__ import annotations

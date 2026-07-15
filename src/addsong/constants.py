@@ -1,7 +1,6 @@
 """Shared constants for addsong.
 
-Mirrors the top-of-script configuration values from the original Bash
-implementation, exposed here as module-level constants so every other module
+Configuration values exposed as module-level constants so every other module
 can import them without recomputation.
 """
 
@@ -13,8 +12,8 @@ AUDIO_FORMATS: tuple[str, ...] = (
 )
 
 # Permanent yt-dlp errors that are never worth retrying. Matched case-insensitively
-# against yt-dlp's stderr. Kept as one alternation string to preserve the Bash
-# behaviour of a single grep -E pass.
+# against yt-dlp's stderr. Kept as one alternation string so the matcher does a
+# single regex pass over stderr.
 YTDLP_HARD_ERRORS: str = (
     "private video|members-only|members only|video unavailable|"
     "this video is unavailable|is unavailable|has been removed|"
@@ -38,7 +37,7 @@ LEDGER_BASENAME = "imported.tsv"
 SUBSCRIPTIONS_BASENAME = "subscribed.tsv"
 CONFIG_BASENAME = "config"
 
-# Exit codes used across the pipeline. Keep in sync with the Bash script:
+# Exit codes used across the pipeline:
 #   0 -> added, 2 -> skipped (duplicate or user skip), 1 -> failed.
 EXIT_ADDED = 0
 EXIT_SKIPPED = 2

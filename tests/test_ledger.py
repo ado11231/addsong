@@ -1,4 +1,4 @@
-"""Parity tests for the ledger TSV dedup layer."""
+"""Tests for the ledger TSV dedup layer."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def test_read_rows_missing_file_yields_nothing(tmp_path: str) -> None:
 
 
 def test_existing_bash_ledger_is_read(tmp_path: str) -> None:
-    # Confirm the on-disk format from the Bash version is parsed correctly.
+    # Confirm the stable on-disk ledger format is parsed correctly.
     ledger = str(tmp_path / "ledger.tsv")
     with open(ledger, "w", encoding="utf-8") as fh:
         fh.write("dQw4w9WgXcQ\tArtist\tTitle\t2024-01-01T00:00:00\n")
