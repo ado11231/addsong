@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="175" height="24" viewBox="0 0 175 24" role="img" aria-label="Powered by: yt-dlp">
+  <title>Powered by: yt-dlp</title>
+  <linearGradient id="g" x2="0" y2="100%">
+    <stop offset="0" stop-color="#fff" stop-opacity=".10"/>
+    <stop offset="1" stop-color="#000" stop-opacity=".06"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="100%" height="100%" rx="4"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="112" height="24" fill="#FF0000"/>
+    <rect x="112" width="63" height="24" fill="#282828"/>
+    <rect width="100%" height="100%" fill="url(#g)"/>
+  </g>
+  <rect width="175" height="24" rx="4" fill="none" stroke="#000" stroke-opacity=".08"/>
+  <g transform="translate(11,5) scale(0.5833333333333334)" fill="#fff">
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+  </g>
+  <g font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="10" font-weight="700" letter-spacing=".4">
+    <text x="30" y="15.5" fill="#fff">POWERED BY</text>
+    <text x="143.5" y="15.5" text-anchor="middle" fill="#fff">yt-dlp</text>
+  </g>
+</svg>

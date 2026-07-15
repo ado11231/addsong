@@ -2,7 +2,7 @@ name: Release (PyPI)
 
 # Builds the wheel + sdist on a pushed v* tag and publishes to PyPI using
 # OIDC trusted publishing (no stored API token). Configure the trusted
-# publisher once on pypi.org first — see RELEASE.md.
+# publisher once on pypi.org first — see docs/RELEASE.md.
 on:
   push:
     tags:
