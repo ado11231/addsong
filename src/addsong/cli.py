@@ -60,6 +60,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quality", metavar="N", help="audio quality 0-10, 0=best")
     p.add_argument("--notify", action="store_true", help="fire desktop notification per import")
     p.add_argument("--no-color", action="store_true", help="disable colored output")
+    p.add_argument(
+        "--print-completion",
+        metavar="SHELL",
+        help="print a shell completion script (bash/zsh/fish) and exit",
+    )
 
     # Positional: the URL or free-text query. Bare words are joined by argparse
     # into a single string via nargs='*' so "queen bohemian rhapsody" stays whole
@@ -211,6 +216,8 @@ def main(argv: list[str] | None = None) -> int:
     if ns.version:
         print(f"{_PROG} {__version__}")
         return 0
+    if ns.print_completion is not None:
+        return _print_completion(ns.print_completion)
 
     _validate_and_resolve(parser, ns)
     query = " ".join(ns.query) if ns.query else ""
@@ -313,6 +320,16 @@ def _has_subscriptions(config) -> bool:  # type: ignore[no-untyped-def]
     return subs.has_subscriptions(config.subscriptions)
 
 
+def _print_completion(shell: str) -> int:
+    from addsong.completion import render, shells
+
+    valid = shells()
+    if shell not in valid:
+        _die(f"--print-completion wants one of: {' '.join(valid)} (got: '{shell}')")
+    sys.stdout.write(render(shell))
+    return 0
+
+
 def _print_help(to_stderr: bool = False) -> None:
     text = _help_text()
     (sys.stderr if to_stderr else sys.stdout).write(text)
@@ -357,7 +374,10 @@ def _help_text() -> str:
         "    --notify          Fire a desktop notification per imported track.\n"
         "    --no-color        Disable colored output (also honors NO_COLOR).\n"
         "    -h, --help        Show this help.\n"
-        "    --version         Print the version and exit.\n\n"
+        "    --version         Print the version and exit.\n"
+        "    --print-completion SHELL\n"
+        "                      Print a shell completion script (bash/zsh/fish)\n"
+        "                      and exit. Install: `source <(addsong --print-completion bash)`.\n\n"
         "EXAMPLES:\n"
         f"    {_PROG} \"https://www.youtube.com/watch?v=...\"\n"
         f"    {_PROG} \"queen bohemian rhapsody\"\n"
