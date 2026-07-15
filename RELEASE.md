@@ -1,91 +1,72 @@
-# Releasing addsong + Publishing The Homebrew Tap
+# Releasing addsong (PyPI)
 
-The main repo is already pushed to https://github.com/ado11231/addsong.
+addsong is published to [PyPI](https://pypi.org/project/addsong/) via the
+`.github/workflows/release.yml` GitHub Action, which builds the wheel + sdist
+and uploads them using **OIDC trusted publishing** (no API token stored as a
+secret). Users then `pipx install addsong` on every OS.
 
-## 1. Tag And Push The Release
+## Prerequisites (one time)
 
-The version in the script (`VERSION` in `addsong`) and the tag must match.
-It is currently `1.0.0`.
+1. The `release.yml` workflow is set up to run on a `v*` tag push and publish
+   via `pypa/gh-action-pypi-publish` with `id-token: write`.
+2. On PyPI, register the project (first release) and configure the trusted
+   publisher:
+   - Go to **https://pypi.org/manage/project/addsong/settings/publishing/**.
+   - Add a **Pending publisher** (or edit the existing one):
+     - PyPI Project Name: `addsong`
+     - Owner: `ado11231`
+     - Repository name: `apple-music-pipeline`
+     - Workflow name: `release.yml`
+     - Environment name: `pypi` (matches the workflow's `environment:`)
+   - This must be done once *before* the first tagged release, or the upload
+     step will fail.
 
-```bash
-git tag -a v1.0.0 -m "addsong 1.0.0"
-git push origin v1.0.0
-```
+## 1. Bump The Version
 
-GitHub now serves a source tarball at:
-
-```
-https://github.com/ado11231/addsong/archive/refs/tags/v1.0.0.tar.gz
-```
-
-## 2. Compute The Tarball Checksum
-
-```bash
-curl -sL https://github.com/ado11231/addsong/archive/refs/tags/v1.0.0.tar.gz \
-  | shasum -a 256
-```
-
-Copy the 64-character hash.
-
-## 3. Create Your Tap Repo (One Time, Reusable For Every Future Tool)
-
-Create an empty repo named exactly **`homebrew-tap`** on GitHub (no README, no
-.gitignore), then clone it and add the formula:
+The version lives in one place: `__version__` in `src/addsong/__init__.py`.
+Hatchling reads it for the wheel/sdist (`dynamic = ["version"]` in
+`pyproject.toml`). Bump it (e.g. to `1.1.0`), commit, and push to `main`:
 
 ```bash
-git clone https://github.com/ado11231/homebrew-tap.git ~/homebrew-tap
-mkdir -p ~/homebrew-tap/Formula
-cp Formula/addsong.rb ~/homebrew-tap/Formula/addsong.rb
-```
-
-## 4. Fill In The sha256
-
-In `~/homebrew-tap/Formula/addsong.rb`, replace the placeholder sha256 with the
-hash from step 2:
-
-```bash
-sed -i 's/0000000000000000000000000000000000000000000000000000000000000000/PASTE_SHA256_HERE/' ~/homebrew-tap/Formula/addsong.rb
-```
-
-Commit and push:
-
-```bash
-cd ~/homebrew-tap
-git add Formula/addsong.rb
-git commit -m "addsong 1.0.0"
+$EDITOR src/addsong/__init__.py     # set __version__ = "1.1.0"
+git add src/addsong/__init__.py
+git commit -m "release: 1.1.0"
 git push
 ```
 
-## 5. Test The Install
+## 2. Tag And Push
+
+The tag must match the version (minus the leading `v`):
 
 ```bash
-brew install ado11231/tap/addsong
-addsong --version            # => addsong 1.0.0
+git tag -a v1.1.0 -m "addsong 1.1.0"
+git push origin v1.1.0
 ```
 
-Optionally audit the formula before publishing:
+## 3. The Workflow Publishes
+
+Pushing the `v*` tag triggers `release.yml`, which:
+
+1. Checks out the ref at the tag.
+2. Builds the wheel and sdist with `python -m build`.
+3. Uploads them to PyPI using OIDC trusted publishing (environment `pypi`).
+
+Watch it under **Actions → "Release → PyPI"** on the tag ref. When it's green,
+the new version is installable:
 
 ```bash
-brew audit --new --formula ado11231/tap/addsong
-brew test addsong
+pipx install addsong==1.1.0
+addsong --version            # => addsong 1.1.0
 ```
 
 ## Future Releases
 
-1. Bump `VERSION` in `addsong`, commit and push.
-2. Tag `vX.Y.Z`, push the tag.
-3. Recompute the sha256 (step 2) and update `url` + `sha256` in the tap's
-   `Formula/addsong.rb`, then push the tap.
+1. Bump `__version__` in `src/addsong/__init__.py`, commit, push to `main`.
+2. Tag `vX.Y.Z` and push the tag. The workflow does the rest.
 
-## The Linux / Windows Installers
+## Rollback
 
-`install.sh` (Linux/WSL) and `install.ps1` (Windows) download `addsong` straight
-from the **`main`** branch, so a normal `git push` to `main` is all it takes for
-new users to get the latest script — no tag or checksum step like the Homebrew
-tap needs. To pin an installer to a specific ref instead, users can set
-`ADDSONG_REF` (e.g. `ADDSONG_REF=v1.0.0`) before running it.
-
-## Adding More Tools To The Same Tap
-
-Drop another `Formula/<tool>.rb` into the same `homebrew-tap` repo. Users get it
-with `brew install ado11231/tap/<tool>` — no new tap needed.
+PyPI doesn't allow re-uploading the same filename. To pull a broken release,
+delete the version from the PyPI project page (file by file); users who pinned
+the bad version will need to upgrade past it. To republish fixes, bump the
+version (even a patch) and release again.
