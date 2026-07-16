@@ -68,37 +68,12 @@ pipx upgrade addsong
 
 With pip instead of pipx, run `python -m pip install --user --upgrade addsong`.
 
-## Shell Completions
 
-**addsong** can print a completion script for your shell. Source it or save it to
-your shell's completion directory.
-
-```bash
-source <(addsong --print-completion bash)      # bash
-addsong --print-completion zsh  > ~/.zsh/completions/_addsong   # zsh
-addsong --print-completion fish > ~/.config/fish/completions/addsong.fish  # fish
-```
-
-See your shell's docs for where completion files go.
-
-## Your First Song
+## Run Command
 
 ```bash
 addsong "songname"
 ```
-
-**addsong** shows what it found so you can fix mistakes before saving.
-
-```
-  Review track ♪
-  Artist: Artist Name
-  Title:  Song Title
-
-  [Enter] Add  ·  [E] Edit  ·  [S] Skip
-  ❯
-```
-
-Press Enter and the song lands in Apple Music a second later.
 
 ## Commands
 
