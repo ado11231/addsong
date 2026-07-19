@@ -1,11 +1,11 @@
 <h3 align="center">addsong</h3>
 
 <p align="center">
-  <a href="https://pypi.org/project/addsong/"><img src="https://img.shields.io/pypi/v/addsong.svg?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI version"></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/pypi/pyversions/addsong.svg?style=for-the-badge&logo=python&logoColor=yellow" alt="Python versions"></a>
-  <a href="https://github.com/ado11231/addsong/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/addsong.svg?style=for-the-badge&color=green" alt="License"></a>
-  <a href="https://github.com/yt-dlp/yt-dlp"><img src="https://img.shields.io/badge/Powered%20by-yt--dlp-FF0000.svg?style=for-the-badge&logo=youtube&logoColor=white" alt="Powered by yt-dlp"></a>
-  <a href="https://ffmpeg.org/"><img src="https://img.shields.io/badge/Tagged%20with-ffmpeg-007808.svg?style=for-the-badge&logo=ffmpeg&logoColor=white" alt="Tagged with ffmpeg"></a>
+  <a href="https://pypi.org/project/addsong/"><img src="assets/badges/pypi.svg" alt="PyPI version"></a>
+  <a href="https://www.python.org/downloads/"><img src="assets/badges/python.svg" alt="Python versions"></a>
+  <a href="https://github.com/ado11231/addsong/blob/main/LICENSE"><img src="assets/badges/license.svg" alt="License"></a>
+  <a href="https://github.com/yt-dlp/yt-dlp"><img src="assets/badges/ytdlp.svg" alt="Powered by yt-dlp"></a>
+  <a href="https://ffmpeg.org/"><img src="assets/badges/ffmpeg.svg" alt="Tagged with ffmpeg"></a>
 </p>
 
 <p align="center">
@@ -14,9 +14,10 @@
 
 <p align="center"><b>Paste a link and the song shows up in Apple Music.</b></p>
 
-addsong takes a song name or a YouTube link. It downloads the track, tags it
-with the title, artist, and cover art, then drops it into Apple Music. No
-dragging files around, just a single command.
+**addsong** takes a song name or a YouTube link. It downloads the track,
+checks the title, tags it
+with the artist, title, and cover art, then drops it into Apple Music. No
+dragging files around — just a single command.
 
 ```bash
 addsong "songname"
@@ -25,42 +26,30 @@ addsong "https://www.youtube.com/watch?v=..."
 
 ## Installation
 
-You need Python 3.11 or newer, plus two tools that do the real work, yt-dlp
-and ffmpeg. addsong itself is a Python package you install with pipx.
+You need Python 3.11 or newer, yt-dlp, and ffmpeg.
+**addsong** itself is a Python package you install with pipx.
 
-### 1. Install addsong
+### Get addsong
 
 ```bash
 pipx install addsong
 ```
 
-Don't have pipx yet? Install it first. On macOS run `brew install pipx`. On
-Linux run `pip install --user pipx` (or use your distro's package). On Windows
-run `pip install pipx`. Once pipx is set up, run `pipx ensurepath` and reopen
-your terminal so addsong is on your PATH.
-
-No pipx? `pip install --user addsong` works too.
-
 ### 2. Install yt-dlp and ffmpeg
 
-These do the downloading and tagging. Pick the command for your system.
-
-&nbsp;<img src="assets/macos.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> **macOS**
+**macOS**&nbsp;<img src="assets/macos.svg" height="16" align="absmiddle" style="position: relative; top: -2px;">
 
 ```bash
 brew install yt-dlp ffmpeg
 ```
 
-&nbsp;<img src="assets/linux.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> **Linux and WSL**
+**Linux**&nbsp;<img src="assets/linux.svg" height="16" align="absmiddle" style="position: relative; top: -2px;">
 
 ```bash
-sudo apt-get install -y ffmpeg && pipx install yt-dlp
+sudo <package manager> install ffmpeg && pipx install yt-dlp
 ```
 
-On other distros use your package manager for ffmpeg. yt-dlp can come from
-pipx or pip.
-
-&nbsp;<img src="assets/windows.svg" height="22" align="absmiddle" style="position: relative; top: -3px;"> **Windows** (PowerShell)
+**Windows**&nbsp;<img src="assets/windows.svg" height="16" align="absmiddle" style="position: relative; top: -2px;"> (PowerShell)
 
 ```powershell
 winget install yt-dlp.yt-dlp Gyan.FFmpeg
@@ -80,37 +69,12 @@ pipx upgrade addsong
 
 With pip instead of pipx, run `python -m pip install --user --upgrade addsong`.
 
-## Shell Completions
 
-addsong can print a completion script for your shell. Source it or save it to
-your shell's completion directory.
-
-```bash
-source <(addsong --print-completion bash)      # bash
-addsong --print-completion zsh  > ~/.zsh/completions/_addsong   # zsh
-addsong --print-completion fish > ~/.config/fish/completions/addsong.fish  # fish
-```
-
-See your shell's docs for where completion files go.
-
-## Your First Song
+## Quick start
 
 ```bash
 addsong "songname"
 ```
-
-addsong shows what it found so you can fix mistakes before saving.
-
-```
-  Review track ♪
-  Artist: Artist Name
-  Title:  Song Title
-
-  [Enter] Add  ·  [E] Edit  ·  [S] Skip
-  ❯
-```
-
-Press Enter and the song lands in Apple Music a second later.
 
 ## Commands
 
@@ -148,19 +112,3 @@ Press Enter and the song lands in Apple Music a second later.
 
 Set environment variables like `ADDSONG_WATCH_DIR` to change defaults. Run
 `addsong --help` for the full list.
-
-## Download Location
-
-On macOS and Windows songs go straight into Apple Music. On Linux they land
-in `~/Music/addsong/`. Point them somewhere else with
-`ADDSONG_WATCH_DIR=/your/folder`.
-
-## Common Errors
-
-If you see `command not found`, run `pipx ensurepath` and reopen your
-terminal. Still stuck? Repeat the [Installation](#installation) step.
-
-If a song downloads but never shows up, open the Apple Music app and keep it
-open while adding (macOS or Windows).
-
-If a download fails, update yt-dlp, then retry with `--verbose` to see why.
