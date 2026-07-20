@@ -1,8 +1,9 @@
 # Architecture
 
-`addsong` is a Python package (installable via pip/pipx) that exposes a single
-`addsong` console-script. It has no daemon, no API access, and no dependency on
-AppleScript or the Music app's scripting interface. It relies on one behavior
+`addsong` is a Python package (installable with pip/pipx) that exposes a single
+`addsong` console-script. It has no daemon, no API access, and no dependency
+on
+AppleScript or the Music.app scripting interface. It relies on one behavior
 that Apple Music (macOS), the Apple Music preview app (Windows 11), and legacy
 iTunes (Windows) all share: each scans a per-library "Automatically Add to ..."
 watch folder and imports anything dropped there. On Linux / WSL without a
@@ -19,7 +20,7 @@ Platform detection lives in `platform.detect_os()` (`mac` / `win` / `wsl` /
 `linux` / `other`); `platform.default_watch_dir()` returns the appropriate
 default per OS, and `ADDSONG_WATCH_DIR` always overrides it.
 
-## Module Map (`src/addsong/`)
+## Module map (`src/addsong/`)
 
 | Module               | Responsibility                                             |
 | -------------------- | ---------------------------------------------------------- |
@@ -37,7 +38,7 @@ default per OS, and `ADDSONG_WATCH_DIR` always overrides it.
 | `completion.py`       | Shell-completion script generation for `--print-completion bash/zsh/fish`; flags/subcommands declared once and rendered per shell. |
 | `cli.py`             | `argparse` parser, subcommand peek, mutual-exclusivity rules, `--print-completion`, exit-code dispatch. |
 
-## The Pipeline (Per Track)
+## The pipeline (per track)
 
 `pipeline.process_one(run, url, interactive)` runs one track:
 
@@ -69,7 +70,7 @@ default per OS, and `ADDSONG_WATCH_DIR` always overrides it.
 8. **Record + notify.** On success, `ledger.add()` records the import, the UI
    prints `Added artist - title`, and a desktop notification fires if `--notify`.
 
-## Why The Watch Folder
+## Why the watch folder
 
 Using the watch folder instead of AppleScript or the Music API means:
 
@@ -79,7 +80,7 @@ Using the watch folder instead of AppleScript or the Music API means:
 - **Resilience.** If Music is closed when a file is written, it is imported the
   next time Music opens.
 
-## Exit Codes (Per Track)
+## Exit codes (per track)
 
 `process_one()` returns `0` (added), `2` (skipped — duplicate or user skip),
 or `1` (failed). The top-level run aggregates these in `finish_batch()` and
@@ -87,7 +88,7 @@ exits non-zero (`1`) if any track failed, `0` otherwise. `forget` returns `1`
 when it refuses to wipe the ledger without a TTY for confirmation (`-y` skips
 the prompt).
 
-## State And Side Effects
+## State and side effects
 
 - **Ledger:** append-only TSV at `ADDSONG_LEDGER`
   (`~/.local/state/addsong/imported.tsv`), one row per imported track:
