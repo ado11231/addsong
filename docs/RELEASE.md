@@ -1,11 +1,11 @@
 # Releasing addsong (PyPI)
 
-addsong is published to [PyPI](https://pypi.org/project/addsong/) via the
+addsong is published to [PyPI](https://pypi.org/project/addsong/) through the
 `.github/workflows/release.yml` GitHub Action, which builds the wheel + sdist
 and uploads them using **OIDC trusted publishing** (no API token stored as a
 secret). Users then `pipx install addsong` on every OS.
 
-## Prerequisites (one time)
+## Prerequisites (one time setup)
 
 1. The `release.yml` workflow is set up to run on a `v*` tag push and publish
    via `pypa/gh-action-pypi-publish` with `id-token: write`.
@@ -21,7 +21,7 @@ secret). Users then `pipx install addsong` on every OS.
    - This must be done once *before* the first tagged release, or the upload
      step will fail.
 
-## 1. Bump The Version
+## 1. Bump the version
 
 The version lives in one place: `__version__` in `src/addsong/__init__.py`.
 Hatchling reads it for the wheel/sdist (`dynamic = ["version"]` in
@@ -34,7 +34,7 @@ git commit -m "release: 1.1.0"
 git push
 ```
 
-## 2. Tag And Push
+## 2. Tag and push
 
 The tag must match the version (minus the leading `v`):
 
@@ -43,7 +43,7 @@ git tag -a v1.1.0 -m "addsong 1.1.0"
 git push origin v1.1.0
 ```
 
-## 3. The Workflow Publishes
+## 3. The workflow publishes
 
 Pushing the `v*` tag triggers `release.yml`, which:
 
