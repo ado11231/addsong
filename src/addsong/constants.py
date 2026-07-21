@@ -7,11 +7,13 @@ can import them without recomputation.
 from __future__ import annotations
 
 # Audio formats accepted by --format. The order is preserved for --help text.
+# 'best' lets yt-dlp pick the highest-quality available format.
+# 'best' lets yt-dlp pick the highest-quality available format.
 AUDIO_FORMATS: tuple[str, ...] = (
     "m4a", "mp3", "flac", "opus", "vorbis", "wav", "aac", "alac", "best",
 )
 
-# Permanent yt-dlp errors that are never worth retrying. Matched case-insensitively
+# Permanent yt-dlp errors never worth retrying. Matched case-insensitively
 # against yt-dlp's stderr. Kept as one alternation string so the matcher does a
 # single regex pass over stderr.
 YTDLP_HARD_ERRORS: str = (
@@ -28,17 +30,17 @@ YTDLP_HARD_ERRORS: str = (
 DEFAULT_AUDIO_FORMAT = "m4a"
 # yt-dlp VBR quality: 0 best, 10 worst.
 DEFAULT_AUDIO_QUALITY = "0"
-DEFAULT_RETRIES = 2        # extra attempts after the first
-DEFAULT_RETRY_DELAY = 3    # base backoff seconds, grows per attempt
+DEFAULT_RETRIES = 2     # extra attempts after the first
+DEFAULT_RETRY_DELAY = 3  # base backoff seconds, grows per attempt
 
 # State-file basenames (the directory is ~/.local/state/addsong by default,
 # overrideable via ADDSONG_* env vars resolved in config.py).
-LEDGER_BASENAME = "imported.tsv"
+LEDGER_BASENAME = "imported.tsv"  # tab-separated: id, artist, title, timestamp
 SUBSCRIPTIONS_BASENAME = "subscribed.tsv"
-CONFIG_BASENAME = "config"
+CONFIG_BASENAME = "config"  # no extension; KEY=VALUE lines  # no extension; KEY=VALUE lines
 
 # Exit codes used across the pipeline:
 #   0 -> added, 2 -> skipped (duplicate or user skip), 1 -> failed.
-EXIT_ADDED = 0
-EXIT_SKIPPED = 2
-EXIT_FAILED = 1
+EXIT_ADDED = 0   # track imported successfully
+EXIT_SKIPPED = 2   # duplicate or user skip
+EXIT_FAILED = 1   # download/tag/move error
