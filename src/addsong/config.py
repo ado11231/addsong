@@ -27,18 +27,21 @@ from addsong.constants import (
 )
 
 # Only ADDSONG_* keys are read from the config file.
-_KEY_RE = re.compile(r"^ADDSONG_\w+$")
+_KEY_RE = re.compile(r"^ADDSONG_[A-Za-z0-9_]+$")
 
 
 def _is_truthy(value: str) -> bool:
+    """Return True for common truthy string values."""
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _is_falsy(value: str) -> bool:
+    """Return True for common falsy string values."""
     return value.strip().lower() in {"0", "false", "no", "off"}
 
 
 def _strip_quotes(value: str) -> str:
+    """Remove a single pair of matching surrounding quotes."""
     v = value.strip()
     if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
         return v[1:-1]
