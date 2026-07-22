@@ -17,7 +17,7 @@ from datetime import datetime
 
 
 def has(path: str, track_id: str) -> bool:
-    """Return True if track_id is already in the ledger."""
+    """Return True if track_id is already in the ledger. Read-only."""
     try:
         with open(path, encoding="utf-8") as fh:
             for line in fh:
@@ -32,7 +32,7 @@ def has(path: str, track_id: str) -> bool:
 
 
 def add(path: str, track_id: str, artist: str, title: str) -> None:
-    """Append an import row to the ledger, creating its parent dir."""
+    """Append an import row to the ledger, creating its parent dir. Idempotent rows."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     with open(path, "a", encoding="utf-8") as fh:
@@ -40,13 +40,13 @@ def add(path: str, track_id: str, artist: str, title: str) -> None:
 
 
 def clear(path: str) -> None:
-    """Remove the ledger file (used by `forget`)."""
+    """Remove the ledger file (used by `forget`). Idempotent."""
     with contextlib.suppress(FileNotFoundError):
         os.remove(path)
 
 
 def count(path: str) -> int:
-    """Return the number of rows in the ledger (0 if missing/empty)."""
+    """Return the number of rows in the ledger (0 if missing or empty)."""
     try:
         with open(path, encoding="utf-8") as fh:
             return sum(1 for line in fh if line.strip())
@@ -55,7 +55,7 @@ def count(path: str) -> int:
 
 
 def read_rows(path: str) -> Iterator[tuple[str, str, str, str]]:
-    """Yield (id, artist, title, timestamp) tuples — powers the `history` view."""
+    """Yield (id, artist, title, timestamp) tuples — powers the dedup check."""
     try:
         with open(path, encoding="utf-8") as fh:
             for line in fh:
