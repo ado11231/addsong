@@ -1,6 +1,6 @@
 """ffmpeg tagging + watch-folder move.
 
-Re-tags the downloaded audio with `ffmpeg -c copy` (preserving embedded
+Re-tags the downloaded audio with ``ffmpeg -c copy`` (preserving embedded
 artwork), moves it into the watch folder with collision-safe naming, and emits
 the Added status + desktop notification via callbacks. Ledger writes are
 delegated to an ``on_add`` callback so this module stays decoupled from the
@@ -27,7 +27,7 @@ ErrFn = Callable[[str], None]
 
 
 def _last_error_line(err_path: str) -> str:
-    """Return the last line of ff.err containing 'error' (case-insensitive), or ''."""
+    """Return the last line of ``ff.err`` containing 'error' (case-insensitive), or ''."""
     try:
         with open(err_path, encoding="utf-8", errors="replace") as fh:
             lines = fh.readlines()

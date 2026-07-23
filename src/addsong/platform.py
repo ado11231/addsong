@@ -19,7 +19,7 @@ _WSL_RE = re.compile(r"microsoft", re.IGNORECASE)
 def detect_os() -> OSMode:
     """Return one of mac/win/wsl/linux/other based on the current platform.
 
-    Uses `sys.platform` plus a WSL procfs probe on Linux.
+    Uses ``sys.platform`` plus a WSL procfs probe on Linux.
     """
     if sys.platform == "darwin":
         return "mac"
@@ -38,7 +38,7 @@ def detect_os() -> OSMode:
 
 
 def _win_userprofile() -> str:
-    """Return the Windows user root, honoring USERPROFILE then HOME."""
+    """Return the Windows user root, honoring USERPROFILE then HOME then Path.home."""
     return os.environ.get("USERPROFILE") or str(Path.home())
 
 

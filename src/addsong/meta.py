@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-# 11-char YouTube id alphabet, used by id_from_url.
+# 11-char YouTube id alphabet, used by id_from_url and the URL parser.
 _YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 # --- clean_meta ---------------------------------------------------------------

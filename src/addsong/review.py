@@ -1,6 +1,6 @@
 """Interactive metadata review over /dev/tty.
 
-Shows the scraped artist/title and lets the user accept (Enter), edit (E), or
+Shows the scraped artist and title, letting the user accept (Enter), edit (E), or
 skip (S). Only invoked when the run is interactive (see ui/constant flags);
 /dev/tty is opened fresh for read+write so it works mid-pipeline regardless of
 stdin.

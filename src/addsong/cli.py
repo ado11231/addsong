@@ -1,7 +1,7 @@
 """CLI entry point: argparse, subcommands, mutual-exclusivity, exit codes.
 
-Behaviour:
-  - subcommands peeked before flags: subscribe/unsubscribe/list/sync/forget.
+Behavior:
+  - subcommands are peeked before flags: subscribe, unsubscribe, list, sync, forget.
   - --from / --playlist / --results / a URL/search arg are mutually exclusive.
   - a bare non-URL argument defaults to --results 1 (a single YouTube search).
   - unquoted bare words are joined into the query (no quoting needed).

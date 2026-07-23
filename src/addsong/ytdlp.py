@@ -3,7 +3,7 @@
 stdout is captured to a file (or streamed to a progress callback), stderr to a
 file, and transient failures retry with linear backoff. Permanent errors
 (private/unavailable/region-locked/etc., matched against
-`YTDLP_HARD_ERRORS`) return immediately without retrying.
+``YTDLP_HARD_ERRORS``) return immediately without retrying.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ RetryCallback = Callable[[int, int, int], None]
 
 
 def _is_hard_error(stderr_path: str) -> bool:
+    """True if stderr contains a permanent (non-retryable) yt-dlp error."""
     try:
         with open(stderr_path, encoding="utf-8", errors="replace") as fh:
             text = fh.read()

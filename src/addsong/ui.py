@@ -1,6 +1,6 @@
 """Console UI: colors, status lines, banners, spinner, progress bar, notify.
 
-All informational output (err/say/status/banner) is written to **stderr** so
+All informational output (err, say, status, banner) is written to **stderr** so
 stdout stays clean for scripted use. Spinner and progress render to
 ``/dev/tty`` so they don't pollute piped output.
 
