@@ -156,3 +156,103 @@ def test_default_watch_dir_linux_returns_output_only_fallback(
 ) -> None:
     monkeypatch.setattr(platform_mod.Path, "home", classmethod(lambda cls: tmp_path))  # type: ignore[method-assign]
     assert default_watch_dir("linux") == f"{tmp_path}/Music/addsong"
+
+
+def test_id_from_url_watch_url_with_amp(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_shorts_url_with_params(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://www.youtube.com/shorts/AbCdEfGhIjk?feature=share') == 'AbCdEfGhIjk'
+
+
+def test_id_from_url_embed_url_with_params(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_youtu_be_with_params(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://youtu.be/dQw4w9WgXcQ?si=abc') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_watch_url_no_params(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://www.youtube.com/watch?v=dQw4w9WgXcQ') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_url_with_fragment(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://www.youtube.com/watch?v=dQw4w9WgXcQ#t=5') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_url_with_slash_after_id(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://youtu.be/dQw4w9WgXcQ/') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_http_not_https(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('http://www.youtube.com/watch?v=dQw4w9WgXcQ') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_url_with_query_after(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc') == 'dQw4w9WgXcQ'
+
+
+def test_id_from_url_short_url_id_11_exact(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://youtu.be/AbCdEfGhIjk') == 'AbCdEfGhIjk'
+
+
+def test_id_from_url_url_with_underscore_dash(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://youtu.be/A_B-CdEfGhI') == 'A_B-CdEfGhI'
+
+
+def test_id_from_url_music_youtube_com(tmp_path: str) -> None:
+    from addsong.meta import id_from_url
+    assert id_from_url('https://music.youtube.com/watch?v=dQw4w9WgXcQ') == 'dQw4w9WgXcQ'
+
+
+def test_safe_name_colon_in_name(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('Artist: Title') == 'Artist_ Title'
+
+
+def test_safe_name_multiple_slashes(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('A/B/C') == 'A_B_C'
+
+
+def test_safe_name_backslash_windows(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('A\\B') == 'A_B'
+
+
+def test_safe_name_mixed_separators(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('A/B:C\\D') == 'A_B_C_D'
+
+
+def test_safe_name_no_separators(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('Plain Name') == 'Plain Name'
+
+
+def test_safe_name_empty_string(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('') == ''
+
+
+def test_safe_name_only_slash(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name('/') == '_'
+
+
+def test_safe_name_only_colon(tmp_path: str) -> None:
+    from addsong.meta import safe_name
+    assert safe_name(':') == '_'
