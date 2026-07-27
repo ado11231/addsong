@@ -63,3 +63,76 @@ def test_existing_bash_ledger_is_read(tmp_path: str) -> None:
     assert has(ledger, "dQw4w9WgXcQ") is True
     rows = list(read_rows(ledger))
     assert rows == [("dQw4w9WgXcQ", "Artist", "Title", "2024-01-01T00:00:00")]
+
+
+def test_has_after_clear_is_false(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import add, clear, has
+    add(ledger, 'V1', 'A', 'T')
+    clear(ledger)
+    assert has(ledger, 'V1') is False
+
+
+def test_count_after_multiple_adds(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import add, count
+    add(ledger, 'V1', 'A', 'T')
+    add(ledger, 'V2', 'B', 'U')
+    add(ledger, 'V3', 'C', 'V')
+    assert count(ledger) == 3
+
+
+def test_read_rows_short_row_padded(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import read_rows
+    with open(ledger, 'w') as fh:
+        fh.write('V1\tA\n')
+    rows = list(read_rows(ledger))
+    assert rows == [('V1', 'A', '', '')]
+
+
+def test_has_finds_last_row(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import add, has
+    add(ledger, 'V1', 'A', 'T')
+    add(ledger, 'V2', 'B', 'U')
+    assert has(ledger, 'V2') is True
+
+
+def test_has_does_not_match_partial(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import add, has
+    add(ledger, 'VID000', 'A', 'T')
+    assert has(ledger, 'VID') is False
+
+
+def test_count_empty_file_is_zero(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import count
+    open(ledger, 'w').close()
+    assert count(ledger) == 0
+
+
+def test_count_blank_lines_not_counted(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import count
+    with open(ledger, 'w') as fh:
+        fh.write('\n\n\n')
+    assert count(ledger) == 0
+
+
+def test_add_then_read_rows_preserves_order(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import add, read_rows
+    add(ledger, 'V1', 'A', 'T1')
+    add(ledger, 'V2', 'B', 'T2')
+    rows = list(read_rows(ledger))
+    assert rows[0][0] == 'V1'
+    assert rows[1][0] == 'V2'
+
+
+def test_has_with_special_chars_in_id(tmp_path: str) -> None:
+    ledger = str(tmp_path / 'l.tsv')
+    from addsong.ledger import add, has
+    add(ledger, 'A_B-C', 'Artist', 'Title')
+    assert has(ledger, 'A_B-C') is True
