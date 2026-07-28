@@ -89,3 +89,76 @@ def test_has_subscriptions_false_when_empty(tmp_path: str) -> None:
 
 def test_has_subscriptions_false_when_missing(tmp_path: str) -> None:
     assert subs.has_subscriptions(str(tmp_path / "missing.tsv")) is False
+
+
+def test_read_urls_strips_whitespace(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    with open(path, 'w') as fh:
+        fh.write('  https://a.com  \n')
+    assert list(subs.read_urls(path)) == ['https://a.com']
+
+
+def test_add_returns_true_for_new_url(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    assert subs.add(path, 'https://x.com') is True
+
+
+def test_add_returns_false_for_duplicate(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    subs.add(path, 'https://x.com')
+    assert subs.add(path, 'https://x.com') is False
+
+
+def test_remove_preserves_line_order(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    subs.add(path, 'https://a.com')
+    subs.add(path, 'https://b.com')
+    subs.add(path, 'https://c.com')
+    subs.remove(path, 'https://b.com')
+    assert list(subs.read_urls(path)) == ['https://a.com', 'https://c.com']
+
+
+def test_has_subscriptions_true_with_multiple(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    subs.add(path, 'https://a.com')
+    subs.add(path, 'https://b.com')
+    assert subs.has_subscriptions(path) is True
+
+
+def test_read_urls_yields_iterator(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    subs.add(path, 'https://a.com')
+    it = subs.read_urls(path)
+    assert next(it) == 'https://a.com'
+
+
+def test_add_http_url_accepted(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    assert subs.add(path, 'http://example.com') is True
+
+
+def test_remove_missing_url_is_safe(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    subs.add(path, 'https://a.com')
+    subs.remove(path, 'https://notthere.com')
+    assert list(subs.read_urls(path)) == ['https://a.com']
+
+
+def test_comments_and_blanks_preserved_by_remove(tmp_path: str) -> None:
+    path = str(tmp_path / 's.tsv')
+    from addsong import subscriptions as subs
+    with open(path, 'w') as fh:
+        fh.write('# c1\n\nhttps://a.com\n# c2\n')
+    subs.remove(path, 'https://a.com')
+    with open(path) as fh:
+        content = fh.read()
+    assert '# c1' in content
+    assert '# c2' in content
