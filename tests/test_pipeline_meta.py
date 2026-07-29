@@ -229,3 +229,54 @@ def test_finalize_track_cross_device_move_falls_back_to_copy(
     assert errs == []
     assert os.path.isfile(str(watch / "Artist - Title.m4a"))
     assert os.path.getsize(str(watch / "Artist - Title.m4a")) > 0
+
+
+def test_structured_metadata_with_na_album(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VID\nRaw\nUp\nTrack\nArtist\nNA\n2021\n1'
+    tm = parse_meta(block)
+    assert tm is not None and tm.album == ''
+
+
+def test_structured_metadata_with_na_year(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VID\nRaw\nUp\nTrack\nArtist\nAlbum\nNA\n1'
+    tm = parse_meta(block)
+    assert tm is not None and tm.year == ''
+
+
+def test_structured_metadata_with_na_track(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VID\nRaw\nUp\nTrack\nArtist\nAlbum\n2021\nNA'
+    tm = parse_meta(block)
+    assert tm is not None and tm.track_no == ''
+
+
+def test_heuristic_split_cleans_both_sides(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VID\nQueen - Bohemian Rhapsody (Official Video)\nup\nNA\nNA\nNA\nNA\nNA'
+    tm = parse_meta(block)
+    assert tm is not None
+    assert tm.artist == 'Queen'
+    assert tm.title == 'Bohemian Rhapsody'
+
+
+def test_uploader_is_cleaned_when_no_split(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VID\nJust A Title\nMy Channel (Official)\nNA\nNA\nNA\nNA\nNA'
+    tm = parse_meta(block)
+    assert tm is not None and tm.artist == 'My Channel'
+
+
+def test_parse_meta_extra_lines_ignored(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VID\nTitle\nUp\nNA\nNA\nNA\nNA\nNA\nextra1\nextra2'
+    tm = parse_meta(block)
+    assert tm is not None and tm.id == 'VID'
+
+
+def test_parse_meta_single_line(tmp_path: str) -> None:
+    from addsong.meta import parse_meta
+    block = 'VIDONLY'
+    tm = parse_meta(block)
+    assert tm is not None and tm.id == 'VIDONLY'
