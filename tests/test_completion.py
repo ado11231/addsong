@@ -84,3 +84,80 @@ def test_help_documents_print_completion() -> None:
     rc, _err, out = _run("--help")
     assert rc == 0
     assert "--print-completion" in out
+
+
+def test_bash_has_format_values(tmp_path: str) -> None:
+    from addsong.completion import render
+    out = render('bash')
+    assert 'm4a' in out
+    assert 'mp3' in out
+    assert 'flac' in out
+
+
+def test_zsh_has_format_values(tmp_path: str) -> None:
+    from addsong.completion import render
+    out = render('zsh')
+    assert 'm4a' in out
+    assert 'mp3' in out
+
+
+def test_fish_has_format_values(tmp_path: str) -> None:
+    from addsong.completion import render
+    out = render('fish')
+    assert 'm4a' in out
+    assert 'mp3' in out
+
+
+def test_bash_has_quality_range(tmp_path: str) -> None:
+    from addsong.completion import render
+    out = render('bash')
+    assert '0 1 2 3 4 5 6 7 8 9 10' in out
+
+
+def test_zsh_has_quality_range(tmp_path: str) -> None:
+    from addsong.completion import render
+    out = render('zsh')
+    assert '0 1 2 3 4 5 6 7 8 9 10' in out
+
+
+def test_fish_has_quality_range(tmp_path: str) -> None:
+    from addsong.completion import render
+    out = render('fish')
+    assert '0 1 2 3 4 5 6 7 8 9 10' in out
+
+
+def test_all_shells_mention_subscribe(tmp_path: str) -> None:
+    from addsong.completion import render, shells
+    for s in shells():
+        assert 'subscribe' in render(s)
+
+
+def test_all_shells_mention_forget(tmp_path: str) -> None:
+    from addsong.completion import render, shells
+    for s in shells():
+        assert 'forget' in render(s)
+
+
+def test_all_shells_mention_dry_run(tmp_path: str) -> None:
+    from addsong.completion import render, shells
+    for s in shells():
+        assert 'dry-run' in render(s)
+
+
+def test_all_shells_mention_print_completion(tmp_path: str) -> None:
+    from addsong.completion import render, shells
+    for s in shells():
+        assert 'print-completion' in render(s)
+
+
+def test_shells_returns_tuple(tmp_path: str) -> None:
+    from addsong.completion import shells
+    assert isinstance(shells(), tuple)
+
+
+def test_shells_contains_bash_zsh_fish(tmp_path: str) -> None:
+    from addsong.completion import shells
+    s = shells()
+    assert 'bash' in s
+    assert 'zsh' in s
+    assert 'fish' in s
