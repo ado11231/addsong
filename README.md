@@ -1,11 +1,11 @@
 <h3 align="center">addsong</h3>
 
 <p align="center">
-  <a href="https://pypi.org/project/addsong/"><img src="assets/badges/pypi.svg" alt="PyPI version"></a>
-  <a href="https://www.python.org/downloads/"><img src="assets/badges/python.svg" alt="Python versions"></a>
-  <a href="https://github.com/ado11231/addsong/blob/main/LICENSE"><img src="assets/badges/license.svg" alt="License"></a>
-  <a href="https://github.com/yt-dlp/yt-dlp"><img src="assets/badges/ytdlp.svg" alt="Powered by yt-dlp"></a>
-  <a href="https://ffmpeg.org/"><img src="assets/badges/ffmpeg.svg" alt="Tagged with ffmpeg"></a>
+  <a href="https://pypi.org/project/addsong/"><img src="https://img.shields.io/pypi/v/addsong?style=flat&color=3775A9&logo=pypi&logoColor=white" alt="PyPI version"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/pypi/pyversions/addsong?style=flat&color=3776AB&logo=python&logoColor=white" alt="Python versions"></a>
+  <a href="https://github.com/ado11231/addsong/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="License"></a>
+  <a href="https://github.com/yt-dlp/yt-dlp"><img src="https://img.shields.io/badge/powered_by-yt--dlp-FF0000?style=flat&logo=youtube&logoColor=white" alt="Powered by yt-dlp"></a>
+  <a href="https://ffmpeg.org/"><img src="https://img.shields.io/badge/tagged_with-ffmpeg-007808?style=flat&logo=ffmpeg&logoColor=white" alt="Tagged with ffmpeg"></a>
 </p>
 
 <p align="center">
