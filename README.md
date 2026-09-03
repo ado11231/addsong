@@ -17,7 +17,7 @@
 **addsong** takes a song name or a YouTube link. It downloads the track,
 checks the title, tags it
 with the artist, title, and cover art, then drops it into Apple Music. No
-dragging files around — just a single command.
+dragging files around, just a single command.
 
 ```bash
 addsong "songname"
@@ -29,7 +29,7 @@ addsong "https://www.youtube.com/watch?v=..."
 You need Python 3.11 or newer, yt-dlp, and ffmpeg.
 **addsong** itself is a Python package you install with pipx.
 
-### Get addsong
+### 1. Install addsong
 
 ```bash
 pipx install addsong
