@@ -112,3 +112,10 @@ addsong "songname"
 
 Set environment variables like `ADDSONG_WATCH_DIR` to change defaults. Run
 `addsong --help` for the full list.
+
+## Learn More
+
+* The [wiki](https://github.com/ado11231/addsong/wiki) links every doc and section in one place.
+* [Features](docs/FEATURES.md): what addsong does, and what is planned.
+* [Architecture](docs/ARCHITECTURE.md): how the code is organized, for contributors.
+* [Release](docs/RELEASE.md): how a new version gets to PyPI.

@@ -1,72 +1,95 @@
-# Releasing addsong (PyPI)
+# Release
 
-addsong is published to [PyPI](https://pypi.org/project/addsong/) through the
-`.github/workflows/release.yml` GitHub Action, which builds the wheel + sdist
-and uploads them using **OIDC trusted publishing** (no API token stored as a
-secret). Users then `pipx install addsong` on every OS.
+* How a new version of addsong gets to PyPI.
+* For anyone publishing a release.
 
-## Prerequisites (one time setup)
+## Contents
 
-1. The `release.yml` workflow is set up to run on a `v*` tag push and publish
-   via `pypa/gh-action-pypi-publish` with `id-token: write`.
-2. On PyPI, register the project (first release) and configure the trusted
-   publisher:
-   - Go to **https://pypi.org/manage/project/addsong/settings/publishing/**.
-   - Add a **Pending publisher** (or edit the existing one):
-     - PyPI Project Name: `addsong`
-     - Owner: `ado11231`
-     - Repository name: `apple-music-pipeline`
-     - Workflow name: `release.yml`
-     - Environment name: `pypi` (matches the workflow's `environment:`)
-   - This must be done once *before* the first tagged release, or the upload
-     step will fail.
+1. [Overview](#overview)
+2. [One Time Setup](#one-time-setup)
+3. [Make A Release](#make-a-release)
+4. [What The Workflow Does](#what-the-workflow-does)
+5. [Pull A Bad Release](#pull-a-bad-release)
 
-## 1. Bump the version
+## Overview
 
-The version lives in one place: `__version__` in `src/addsong/__init__.py`.
-Hatchling reads it for the wheel/sdist (`dynamic = ["version"]` in
-`pyproject.toml`). Bump it (e.g. to `1.1.0`), commit, and push to `main`:
+```mermaid
+flowchart LR
+    Bump["Change the version"] --> Push["Push to main"]
+    Push --> Tag["Push a v tag"]
+    Tag --> Build["release.yml builds"]
+    Build --> PyPI[("PyPI")]
+    PyPI --> Users["pipx install addsong"]
+```
+
+* addsong is published to [PyPI](https://pypi.org/project/addsong/), the Python package index, by `.github/workflows/release.yml`.
+* The workflow uses trusted publishing. PyPI trusts this repository's workflow directly, so no API token is stored.
+
+## One Time Setup
+
+* Done once, before the first release.
+
+1. Open the [publishing settings](https://pypi.org/manage/project/addsong/settings/publishing/) on PyPI.
+2. Add a trusted publisher with these values:
+
+| Field | Value |
+| --- | --- |
+| PyPI project name | `addsong` |
+| Owner | `ado11231` |
+| Repository name | `addsong` |
+| Workflow name | `release.yml` |
+| Environment name | `pypi` |
+
+* If the repository is renamed, update the repository name here too, or publishing fails.
+
+## Make A Release
+
+1. Set the new version in `src/addsong/__init__.py`. This is the only place it is set.
+
+```python
+__version__ = "1.1.0"
+```
+
+2. Commit and push to `main`.
 
 ```bash
-$EDITOR src/addsong/__init__.py     # set __version__ = "1.1.0"
 git add src/addsong/__init__.py
 git commit -m "release: 1.1.0"
 git push
 ```
 
-## 2. Tag and push
-
-The tag must match the version (minus the leading `v`):
+3. Wait for CI to pass on `main`.
+4. Make a tag that matches the version, with a `v` in front, and push it.
 
 ```bash
 git tag -a v1.1.0 -m "addsong 1.1.0"
 git push origin v1.1.0
 ```
 
-## 3. The workflow publishes
-
-Pushing the `v*` tag triggers `release.yml`, which:
-
-1. Checks out the ref at the tag.
-2. Builds the wheel and sdist with `python -m build`.
-3. Uploads them to PyPI using OIDC trusted publishing (environment `pypi`).
-
-Watch it under **Actions → "Release → PyPI"** on the tag ref. When it's green,
-the new version is installable:
+5. Watch the "Release (PyPI)" run in the Actions tab.
+6. When it passes, check the new version:
 
 ```bash
-pipx install addsong==1.1.0
-addsong --version            # => addsong 1.1.0
+pipx upgrade addsong
+addsong --version
 ```
 
-## Future Releases
+* Nothing checks that the tag matches `__version__`. If they differ, PyPI gets the version in `__init__.py`. Check both before pushing the tag.
 
-1. Bump `__version__` in `src/addsong/__init__.py`, commit, push to `main`.
-2. Tag `vX.Y.Z` and push the tag. The workflow does the rest.
+## What The Workflow Does
 
-## Rollback
+| Step | What Happens |
+| --- | --- |
+| 1. Build | Builds the wheel and the source package with `python -m build`. |
+| 2. Check | Installs the wheel and runs `addsong --version`. |
+| 3. Publish | Uploads both to PyPI, using the `pypi` environment. |
 
-PyPI doesn't allow re-uploading the same filename. To pull a broken release,
-delete the version from the PyPI project page (file by file); users who pinned
-the bad version will need to upgrade past it. To republish fixes, bump the
-version (even a patch) and release again.
+* A wheel is the ready made package that `pip` and `pipx` install.
+
+## Pull A Bad Release
+
+* PyPI never accepts the same version twice, even after it is deleted.
+
+1. Delete or yank the bad version on the PyPI project page. Yanking hides it from new installs, but keeps it for anyone who asked for that exact version.
+2. Fix the problem.
+3. Release again with a higher version, even if only the last number changes.
